@@ -170,15 +170,23 @@ label{font-size:12px;color:var(--text3);display:block;margin-bottom:5px;font-wei
 .divider{height:1px;background:var(--border);margin:14px 0}
 .bank-section{background:var(--surface2);border:1px solid var(--blue-border);border-radius:var(--radius-sm);padding:14px;margin-top:10px}
 .bank-section-title{font-family:var(--font-head);font-size:13px;font-weight:700;color:var(--blue);margin-bottom:8px}
+
+/* UI TOGGLE CLASSES */
+.web-sidebar { display: none; }
+#tabbar-mobile { display: block; }
+#view-toggle-btn { display: none; }
+
 @media(min-width:768px){
-  .web-layout{display:flex;flex-direction:row}
-  .web-sidebar{width:220px;min-width:220px;background:var(--surface);border-right:1px solid var(--border);height:calc(100vh - 60px);position:sticky;top:60px;overflow-y:auto}
-  .web-sidebar .tab-bar{flex-direction:column;border-bottom:none;height:auto}
-  .web-sidebar .tab{border-bottom:none;border-left:3px solid transparent;text-align:left;min-width:unset;padding:14px 20px;border-radius:0}
-  .web-sidebar .tab.active{border-left-color:var(--accent);border-bottom:none}
-  .web-main{flex:1;overflow:auto;min-height:calc(100vh - 60px)}
-  .modal-overlay{align-items:center}
-  .modal{border-radius:var(--radius);max-width:520px;margin:0 auto}
+  #view-toggle-btn { display: flex; }
+  body:not(.force-mobile) .web-layout{display:flex;flex-direction:row}
+  body:not(.force-mobile) .web-sidebar{display:block; width:220px;min-width:220px;background:var(--surface);border-right:1px solid var(--border);height:calc(100vh - 60px);position:sticky;top:60px;overflow-y:auto}
+  body:not(.force-mobile) #tabbar-mobile{display:none}
+  body:not(.force-mobile) .web-sidebar .tab-bar{flex-direction:column;border-bottom:none;height:auto}
+  body:not(.force-mobile) .web-sidebar .tab{border-bottom:none;border-left:3px solid transparent;text-align:left;min-width:unset;padding:14px 20px;border-radius:0}
+  body:not(.force-mobile) .web-sidebar .tab.active{border-left-color:var(--accent);border-bottom:none}
+  body:not(.force-mobile) .web-main{flex:1;overflow:auto;min-height:calc(100vh - 60px)}
+  body:not(.force-mobile) .modal-overlay{align-items:center}
+  body:not(.force-mobile) .modal{border-radius:var(--radius);max-width:520px;margin:0 auto}
 }
 </style>
 </head>
@@ -213,13 +221,14 @@ label{font-size:12px;color:var(--text3);display:block;margin-bottom:5px;font-wei
       </div>
     </div>
     <div class="header-right">
+      <button class="icon-btn" onclick="toggleMobileView()" id="view-toggle-btn">📱 Mobile</button>
       <div class="sync-dot" id="sync-dot"></div>
       <span style="font-size:11px;color:var(--text3)" id="sync-label">Connected</span>
       <button class="icon-btn" onclick="doLogout()">Sign Out</button>
     </div>
   </div>
   <div id="app-body" class="web-layout">
-    <div id="sidebar" class="web-sidebar" style="display:none"></div>
+    <div id="sidebar" class="web-sidebar"></div>
     <div class="web-main">
       <div id="tabbar-mobile"></div>
       <div class="content" id="content"></div>
@@ -236,6 +245,14 @@ const COLOR_NAMES=['Red','Amber','Emerald','Pink','Indigo','Blue','Violet','Gree
 let API='',TOKEN='',AUTH_TAB='login';
 let state={activeTab:'leaderboard',board:{name:'My Monopoly Board',startMoney:1500, bankBalance: 20580},teams:[],properties:[],transactions:[],modal:null,propSearch:''};
 let sseSource=null;
+
+// ── UI TOGGLE ──
+window.toggleMobileView = () => {
+  const isMobile = document.body.classList.toggle('force-mobile');
+  localStorage.setItem('mono_force_mobile', isMobile);
+  const btn = document.getElementById('view-toggle-btn');
+  if (btn) btn.innerHTML = isMobile ? '💻 Desktop' : '📱 Mobile';
+};
 
 // ── AUTH ──
 function switchAuthTab(t){
@@ -330,6 +347,12 @@ async function startApp(){
   render();connectSSE();
 }
 window.addEventListener('load',async()=>{
+  if(localStorage.getItem('mono_force_mobile') === 'true'){
+    document.body.classList.add('force-mobile');
+    const btn = document.getElementById('view-toggle-btn');
+    if (btn) btn.innerHTML = '💻 Desktop';
+  }
+
   const savedApi=localStorage.getItem('mono_api'),savedToken=localStorage.getItem('mono_token');
   const savedUrl=document.getElementById('server-url');
   if(savedApi)savedUrl.value=savedApi;
@@ -350,7 +373,7 @@ const TABS=[
 ];
 function render(){
   const sidebar=document.getElementById('sidebar');
-  if(sidebar){sidebar.style.display='';sidebar.innerHTML=`<div style="padding:0">${tabsHTML()}</div>`;}
+  if(sidebar){sidebar.innerHTML=`<div style="padding:0">${tabsHTML()}</div>`;}
   const tm=document.getElementById('tabbar-mobile');if(tm)tm.innerHTML=tabsHTML();
   document.getElementById('content').innerHTML=contentHTML();
   const fab=document.getElementById('fab-wrap');
