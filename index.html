@@ -234,7 +234,7 @@ label{font-size:12px;color:var(--text3);display:block;margin-bottom:5px;font-wei
 const COLORS=['#f87171','#fbbf24','#34d399','#f472b6','#818cf8','#60a5fa','#a78bfa','#4ade80','#fb923c','#e879f9','#2dd4bf','#facc15'];
 const COLOR_NAMES=['Red','Amber','Emerald','Pink','Indigo','Blue','Violet','Green','Orange','Fuchsia','Teal','Yellow'];
 let API='',TOKEN='',AUTH_TAB='login';
-let state={activeTab:'leaderboard',board:{name:'My Monopoly Board',startMoney:1500},teams:[],properties:[],transactions:[],modal:null,propSearch:''};
+let state={activeTab:'leaderboard',board:{name:'My Monopoly Board',startMoney:1500, bankBalance: 20580},teams:[],properties:[],transactions:[],modal:null,propSearch:''};
 let sseSource=null;
 
 // ── AUTH ──
@@ -308,6 +308,7 @@ function connectSSE(){
   sseSource.addEventListener('stateUpdate',(e)=>{
     const ns=JSON.parse(e.data);
     state={...state,...ns,modal:state.modal,activeTab:state.activeTab,propSearch:state.propSearch};
+    if (state.board.bankBalance === undefined) state.board.bankBalance = 20580;
     render();
     document.getElementById('header-board-name').textContent=state.board?.name||'';
   });
@@ -319,7 +320,12 @@ function connectSSE(){
 async function startApp(){
   document.getElementById('login-screen').style.display='none';
   document.getElementById('app').classList.add('visible');
-  try{const s=await api('GET','/api/state');state={...state,...s,modal:null};document.getElementById('header-board-name').textContent=state.board?.name||'';}
+  try{
+    const s=await api('GET','/api/state');
+    state={...state,...s,modal:null};
+    if (state.board.bankBalance === undefined) state.board.bankBalance = 20580;
+    document.getElementById('header-board-name').textContent=state.board?.name||'';
+  }
   catch(e){toast('Could not load game state','error');}
   render();connectSSE();
 }
@@ -367,7 +373,6 @@ function leaderboardHTML(){
   if(!state.teams.length)return`<div class="empty"><span class="empty-icon">🏆</span>No teams yet.<br>Go to Teams tab and add players.</div>`;
   const stats=state.teams.map(t=>{
     const tp=state.properties.filter(p=>p.ownedBy===t.id);
-    // Mortgaged props valued at 50% (mortgage value already paid out)
     const tv=tp.reduce((a,p)=>a+(p.mortgaged?Math.floor((p.price||0)/2):(p.price||0)),0);
     return{team:t,props:tp,propCount:tp.length,propValue:tv,balance:t.balance,total:t.balance+tv};
   }).sort((a,b)=>b.total-a.total);
@@ -420,11 +425,12 @@ function teamsHTML(){
           <div class="team-props-count">${props.length} propert${props.length!==1?'ies':'y'}${mc?` · <span style="color:var(--amber)">🔒 ${mc} mortgaged</span>`:''}</div>
         </div>
         <div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end">
-          <div style="display:flex;gap:5px">
+          <div style="display:flex;gap:5px;flex-wrap:wrap;justify-content:flex-end">
             <button class="btn sm success" onclick="openTransact('${team.id}','credit')">+ Credit</button>
             <button class="btn sm danger" onclick="openTransact('${team.id}','debit')">− Debit</button>
+            <button class="btn sm success" onclick="passGo('${team.id}')">GO +₹200</button>
           </div>
-          <div style="display:flex;gap:5px">
+          <div style="display:flex;gap:5px;flex-wrap:wrap;justify-content:flex-end">
             <button class="btn sm" onclick="openRent('${team.id}')">💸 Pay Rent</button>
             <button class="btn sm amber" onclick="openMortgage('${team.id}')">🔒 Mortgage</button>
           </div>
@@ -479,7 +485,10 @@ function propertiesHTML(){
             <div style="display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end">
               ${owner&&!p.mortgaged?`<button class="btn sm amber" onclick="mortgageProp('${p.id}')">Mortgage</button>`:''}
               ${owner&&p.mortgaged?`<button class="btn sm success" onclick="unmortgageProp('${p.id}')">Unmortgage</button>`:''}
-              ${!owner?`<button class="btn sm blue" onclick="openAuctionForProp('${p.id}')">🔨 Auction</button>`:''}
+              ${!owner?`
+                <button class="btn sm success" onclick="openBuyProp('${p.id}')">Buy</button>
+                <button class="btn sm blue" onclick="openAuctionForProp('${p.id}')">🔨 Auction</button>
+              `:''}
               <button class="btn sm" onclick="editProp('${p.id}')">Edit</button>
               <button class="btn sm danger" onclick="deleteProp('${p.id}')">✕</button>
             </div>
@@ -496,7 +505,6 @@ function boardHTML(){
   const owned=state.properties.filter(p=>p.ownedBy).length;
   const mortgaged=state.properties.filter(p=>p.mortgaged).length;
   const bankProps=state.properties.filter(p=>!p.ownedBy);
-  const totalVal=state.properties.reduce((a,p)=>a+(p.price||0),0);
   const totalCash=state.teams.reduce((a,t)=>a+t.balance,0);
   return`<div>
     <div class="card">
@@ -507,12 +515,25 @@ function boardHTML(){
         <div class="stat-box"><div class="stat-num" style="color:var(--amber)">${mortgaged}</div><div class="stat-label">Mortgaged</div></div>
         <div class="stat-box"><div class="stat-num" style="color:var(--blue)">${bankProps.length}</div><div class="stat-label">With Bank</div></div>
       </div>
-      <div style="margin-top:10px;padding:10px;background:var(--surface2);border-radius:var(--radius-sm);border:1px solid var(--border)">
-        <div style="font-size:12px;color:var(--text3);margin-bottom:4px;text-transform:uppercase;letter-spacing:.4px;font-weight:600">Total Cash in Game</div>
-        <div style="font-family:var(--font-head);font-size:22px;font-weight:800;color:var(--green)">₹${num(totalCash)}</div>
+      
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px">
+        <div style="padding:10px;background:var(--surface2);border-radius:var(--radius-sm);border:1px solid var(--border)">
+          <div style="font-size:12px;color:var(--text3);margin-bottom:4px;text-transform:uppercase;letter-spacing:.4px;font-weight:600">Total Player Cash</div>
+          <div style="font-family:var(--font-head);font-size:20px;font-weight:800;color:var(--text)">₹${num(totalCash)}</div>
+        </div>
+        <div style="padding:10px;background:var(--green-bg);border-radius:var(--radius-sm);border:1px solid var(--green-border)">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start">
+            <div>
+              <div style="font-size:12px;color:var(--green);margin-bottom:4px;text-transform:uppercase;letter-spacing:.4px;font-weight:600">Bank Balance</div>
+              <div style="font-family:var(--font-head);font-size:20px;font-weight:800;color:var(--green)">₹${num(state.board.bankBalance)}</div>
+            </div>
+            <button class="btn sm" style="background:var(--green);color:#fff;border:none" onclick="openBankAdjust()">Edit</button>
+          </div>
+        </div>
       </div>
+
       ${bankProps.length?`<div class="bank-section">
-        <div class="bank-section-title">🏦 Bank-Owned Properties — Available for Auction</div>
+        <div class="bank-section-title">🏦 Bank-Owned Properties — Available to Buy</div>
         ${bankProps.map(p=>`<div style="display:flex;align-items:center;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--border)">
           <div style="display:flex;align-items:center;gap:8px">
             <div style="width:10px;height:22px;border-radius:3px;background:${COLORS[p.colorIdx??0]}"></div>
@@ -521,7 +542,10 @@ function boardHTML(){
               <div style="font-size:11px;color:var(--text3)">₹${num(p.price)}</div>
             </div>
           </div>
-          <button class="btn sm blue" onclick="setTab('properties');state.modal=null;state.propSearch='';render();setTimeout(()=>openAuctionForProp('${p.id}'),50)">🔨 Auction</button>
+          <div style="display:flex;gap:6px">
+            <button class="btn sm success" onclick="setTab('properties');state.modal=null;state.propSearch='';render();setTimeout(()=>openBuyProp('${p.id}'),50)">Buy</button>
+            <button class="btn sm blue" onclick="setTab('properties');state.modal=null;state.propSearch='';render();setTimeout(()=>openAuctionForProp('${p.id}'),50)">🔨 Auction</button>
+          </div>
         </div>`).join('')}
       </div>`:''}
     </div>
@@ -542,15 +566,6 @@ function boardHTML(){
       }).join(''):`<div style="color:var(--text3);font-size:13px">No teams yet</div>`}
       <div style="font-size:12px;color:var(--accent2);margin-top:10px;text-align:center">Tap to see full leaderboard →</div>
     </div>
-    <div class="card">
-      <div class="card-title">Color Groups</div>
-      ${getColorGroups().length?getColorGroups().map(g=>`
-        <div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)">
-          <div style="width:14px;height:14px;border-radius:3px;background:${g.color};flex-shrink:0"></div>
-          <div style="flex:1;font-size:14px">${g.name}</div>
-          <div style="font-size:13px;color:var(--text3)">${g.count} properties</div>
-        </div>`).join(''):`<div style="color:var(--text3);font-size:13px">No properties added yet.</div>`}
-    </div>
   </div>`;
 }
 
@@ -566,7 +581,7 @@ function transactionsHTML(){
       const icon=typeIcon[tx.type]||'';
       return`<div class="trans-row">
         <div style="min-width:0;flex:1">
-          <div class="trans-team" style="color:${team?.color||'var(--text3)'}">${esc(team?.name||'Bank/System')}</div>
+          <div class="trans-team" style="color:${team?.color||(tx.teamId==='bank'?'var(--green)':'var(--text3)')}">${esc(team?.name||(tx.teamId==='bank'?'Bank System':'System'))}</div>
           <div class="trans-note">${icon} ${esc(tx.note||tx.type||'Transaction')}</div>
         </div>
         <div style="text-align:right">
@@ -584,7 +599,8 @@ function settingsHTML(){
     <div class="card">
       <div class="card-title">Board Settings</div>
       <div class="form-row" style="margin-top:8px"><label>Board Name</label><input type="text" id="board-name" value="${esc(state.board.name)}" oninput="state.board.name=this.value;document.getElementById('header-board-name').textContent=this.value"></div>
-      <div class="form-row"><label>Starting Money (₹)</label><input type="number" id="start-money" value="${state.board.startMoney}" oninput="state.board.startMoney=parseInt(this.value)||0"></div>
+      <div class="form-row"><label>Starting Player Money (₹)</label><input type="number" id="start-money" value="${state.board.startMoney}" oninput="state.board.startMoney=parseInt(this.value)||0"></div>
+      <div class="form-row"><label>Starting Bank Money (₹)</label><input type="number" id="start-bank-money" value="${state.board.bankBalance}" oninput="state.board.bankBalance=parseInt(this.value)||0"></div>
       <button class="btn primary" style="margin-top:6px" onclick="saveBoardSettings()">Save Settings</button>
     </div>
     <div class="card">
@@ -595,11 +611,6 @@ function settingsHTML(){
       </div>
       <div style="font-size:12px;color:var(--text3);margin-top:10px">Exporting saves a local backup. Reset will permanently delete all game data.</div>
     </div>
-    <div class="card">
-      <div class="card-title">Connection</div>
-      <div style="font-size:13px;color:var(--text2);margin-top:4px">Server: <code style="color:var(--accent2)">${API}</code></div>
-      <div style="font-size:12px;color:var(--text3);margin-top:6px">Data is stored on your server and synced live to all connected browsers.</div>
-    </div>
   </div>`;
 }
 
@@ -607,6 +618,44 @@ function settingsHTML(){
 function modalHTML(){
   if(!state.modal)return'';
   const m=state.modal;
+
+  if(m.type==='adjustBank'){
+    return`<div class="modal-overlay" onclick="closeModalBg(event)"><div class="modal center">
+      <button class="modal-close" onclick="closeModal()">✕</button>
+      <div class="modal-title">🏦 Adjust Bank Funds</div>
+      <div style="font-size:13px;color:var(--text2);margin-bottom:12px">Current Bank Balance: <strong style="color:var(--green)">₹${num(state.board.bankBalance)}</strong></div>
+      <div class="form-row"><label>Amount (₹)</label><input type="number" id="bank-amt" placeholder="e.g. 1000" autofocus></div>
+      <div style="display:flex;gap:8px;margin-top:14px">
+        <button class="btn success" style="flex:1" onclick="adjustBank(true)">+ Add Funds</button>
+        <button class="btn danger" style="flex:1" onclick="adjustBank(false)">- Remove Funds</button>
+      </div>
+    </div></div>`;
+  }
+
+  if(m.type==='buyProp'){
+    const prop=state.properties.find(p=>p.id===m.propId);
+    return`<div class="modal-overlay" onclick="closeModalBg(event)"><div class="modal center">
+      <button class="modal-close" onclick="closeModal()">✕</button>
+      <div class="modal-title">💰 Buy Property</div>
+      <div style="margin-bottom:12px;padding:12px;background:var(--surface2);border-radius:var(--radius-sm);border:1px solid var(--border)">
+        <div style="font-family:var(--font-head);font-size:16px;font-weight:700">${esc(prop.name)}</div>
+        <div style="font-size:13px;color:var(--text3)">Price: <strong style="color:var(--text)">₹${num(prop.price)}</strong> (Paid to Bank)</div>
+      </div>
+      <div style="font-size:12px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Select Player to Buy</div>
+      <div style="max-height:300px;overflow-y:auto">
+      ${state.teams.map(t=>{
+        const canAfford = t.balance >= prop.price;
+        return`<div class="prop-row">
+          <div>
+            <div style="font-weight:700;font-size:14px;color:${t.color}">${esc(t.name)}</div>
+            <div style="font-size:12px;color:var(--text3)">Balance: ₹${num(t.balance)}</div>
+          </div>
+          <button class="btn sm success" onclick="confirmBuyProp('${prop.id}', '${t.id}')" ${!canAfford?'disabled':''}>Buy</button>
+        </div>`;
+      }).join('')}
+      </div>
+    </div></div>`;
+  }
 
   if(m.type==='addTeam'||m.type==='editTeam'){
     const t=m.team||{name:'',balance:state.board.startMoney,color:COLORS[state.teams.length%COLORS.length]};
@@ -661,7 +710,7 @@ function modalHTML(){
     const isCredit=m.subtype==='credit';
     return`<div class="modal-overlay" onclick="closeModalBg(event)"><div class="modal center">
       <button class="modal-close" onclick="closeModal()">✕</button>
-      <div class="modal-title">${isCredit?'💚 Add Credits':'🔴 Deduct Credits'}</div>
+      <div class="modal-title">${isCredit?'💚 Add Credits (from Bank)':'🔴 Deduct Credits (to Bank)'}</div>
       <div style="margin-bottom:12px;padding:10px;background:var(--surface2);border-radius:var(--radius-xs);border:1px solid var(--border)">
         <div style="font-size:12px;color:var(--text3)">Team</div>
         <div style="font-weight:700;color:${team?.color}">${esc(team?.name)}</div>
@@ -681,8 +730,8 @@ function modalHTML(){
     const allProps=state.properties.filter(p=>!p.ownedBy||p.ownedBy===m.teamId);
     return`<div class="modal-overlay" onclick="closeModalBg(event)"><div class="modal center">
       <button class="modal-close" onclick="closeModal()">✕</button>
-      <div class="modal-title">📦 Assign Property</div>
-      <div style="font-size:13px;color:var(--text2);margin-bottom:12px">Team: <strong style="color:${team?.color}">${esc(team?.name)}</strong></div>
+      <div class="modal-title">📦 Admin Assign Property</div>
+      <div style="font-size:13px;color:var(--text2);margin-bottom:12px">Free admin assignment to: <strong style="color:${team?.color}">${esc(team?.name)}</strong></div>
       ${!allProps.length?`<div class="empty">No available properties.</div>`:`
         <div style="max-height:340px;overflow-y:auto">
         ${allProps.map(p=>`<div class="prop-row" onclick="toggleAssign('${p.id}','${m.teamId}')" style="cursor:pointer">
@@ -753,12 +802,13 @@ function modalHTML(){
         <div style="max-height:210px;overflow-y:auto;margin-bottom:12px">
         ${canMortgage.map(p=>{
           const mv=Math.floor((p.price||0)/2);
-          return`<div class="prop-row" style="cursor:pointer" onclick="mortgageProp('${p.id}')">
+          const bankAffords = state.board.bankBalance >= mv;
+          return`<div class="prop-row" style="cursor:${bankAffords?'pointer':'default'}" ${bankAffords?`onclick="mortgageProp('${p.id}')"`:''}>
             <div class="prop-left">
               <div class="color-bar" style="background:${COLORS[p.colorIdx??0]};height:28px"></div>
-              <div><div class="prop-name">${esc(p.name)}</div><div class="prop-meta">Price ₹${num(p.price)} · Receive <strong style="color:var(--amber)">₹${num(mv)}</strong></div></div>
+              <div><div class="prop-name">${esc(p.name)}</div><div class="prop-meta">Price ₹${num(p.price)} · Receive <strong style="color:var(--amber)">₹${num(mv)}</strong>${!bankAffords?' <span style="color:var(--red)">(Bank lacks funds)</span>':''}</div></div>
             </div>
-            <button class="btn sm amber" onclick="event.stopPropagation();mortgageProp('${p.id}')">Mortgage</button>
+            <button class="btn sm amber" ${!bankAffords?'disabled':''} onclick="event.stopPropagation();mortgageProp('${p.id}')">Mortgage</button>
           </div>`;
         }).join('')}
         </div>`:`<div style="color:var(--text3);font-size:13px;padding:8px 0 12px">No properties to mortgage.</div>`}
@@ -769,10 +819,10 @@ function modalHTML(){
         ${isMortgaged.map(p=>{
           const mv=Math.floor((p.price||0)/2);
           const canAfford=(team?.balance||0)>=mv;
-          return`<div class="prop-row mortgaged-row" style="cursor:${canAfford?'pointer':'default'}" ${canAfford?`onclick="unmortgageProp('${p.id}')"`:''}">
+          return`<div class="prop-row mortgaged-row" style="cursor:${canAfford?'pointer':'default'}" ${canAfford?`onclick="unmortgageProp('${p.id}')"`:''}>
             <div class="prop-left">
               <div class="color-bar" style="background:${COLORS[p.colorIdx??0]};height:28px;opacity:.4"></div>
-              <div><div class="prop-name">${esc(p.name)} 🔒</div><div class="prop-meta">Cost to unmortgage: <strong style="color:var(--green)">₹${num(mv)}</strong>${!canAfford?' <span style="color:var(--red)">(insufficient funds)</span>':''}</div></div>
+              <div><div class="prop-name">${esc(p.name)} 🔒</div><div class="prop-meta">Pay Bank to unmortgage: <strong style="color:var(--green)">₹${num(mv)}</strong>${!canAfford?' <span style="color:var(--red)">(insufficient funds)</span>':''}</div></div>
             </div>
             <button class="btn sm success" ${!canAfford?'disabled':''} onclick="event.stopPropagation();unmortgageProp('${p.id}')">Unmortgage</button>
           </div>`;
@@ -790,7 +840,7 @@ function modalHTML(){
     const curBidder=m.currentBidderId?state.teams.find(t=>t.id===m.currentBidderId):null;
     return`<div class="modal-overlay center" onclick="closeModalBg(event)"><div class="modal center">
       <button class="modal-close" onclick="closeModal()">✕</button>
-      <div class="modal-title">🔨 Auction</div>
+      <div class="modal-title">🔨 Auction to Bank</div>
 
       <div style="display:flex;align-items:center;gap:12px;padding:12px;background:var(--surface2);border-radius:var(--radius-sm);border:1px solid var(--border);margin-bottom:14px">
         <div style="width:16px;height:48px;border-radius:4px;flex-shrink:0;background:${COLORS[prop.colorIdx??0]}"></div>
@@ -804,7 +854,7 @@ function modalHTML(){
       ${curBid>0?`<div class="current-bid-banner">
         <div><div class="current-bid-label">Current Highest Bid</div><div class="current-bid-val">₹${num(curBid)}</div></div>
         <div style="text-align:right"><div style="font-size:11px;color:var(--text3)">By</div><div style="font-weight:700;color:${curBidder?.color||'var(--text)'}">${esc(curBidder?.name||'—')}</div></div>
-      </div>`:`<div class="info-box blue" style="margin-bottom:12px">No bids yet. Highest bidder wins — money goes to bank.</div>`}
+      </div>`:`<div class="info-box blue" style="margin-bottom:12px">No bids yet. Highest bidder wins — money goes to the Bank.</div>`}
 
       <div style="font-size:12px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Place a Bid</div>
       <div style="max-height:260px;overflow-y:auto">
@@ -840,10 +890,10 @@ function modalHTML(){
       <div class="modal-title">💀 Declare Bankruptcy</div>
       <div style="padding:12px;background:var(--red-bg);border:1px solid var(--red-border);border-radius:var(--radius-xs);margin-bottom:14px">
         <div style="font-weight:700;color:${team?.color};font-size:15px">${esc(team?.name)}</div>
-        <div style="font-size:12px;color:var(--text3);margin-top:2px">Balance: ₹${num(team?.balance)} · ${tp.length} properties</div>
+        <div style="font-size:12px;color:var(--text3);margin-top:2px">Remaining Cash: ₹${num(team?.balance)} · ${tp.length} properties</div>
       </div>
       <div class="info-box" style="margin-bottom:12px">
-        <strong style="color:var(--red)">Bankruptcy to Bank:</strong> All of ${esc(team?.name)}'s properties return to the bank unencumbered and become available for auction. The player is removed from the game.
+        <strong style="color:var(--red)">Bankruptcy to Bank:</strong> All remaining cash goes to Bank. All of ${esc(team?.name)}'s properties return to the bank unencumbered and become available for auction. Player is removed.
       </div>
       ${tp.length?`<div style="margin-bottom:12px">
         <div style="font-size:12px;color:var(--text3);margin-bottom:6px;font-weight:600;text-transform:uppercase;letter-spacing:.4px">Properties returning to bank (${tp.length}):</div>
@@ -852,7 +902,7 @@ function modalHTML(){
         </div>
       </div>`:''}
       <div style="display:flex;gap:8px;margin-top:6px">
-        <button class="btn danger" style="flex:1" onclick="confirmBankruptcy('${m.teamId}')">💀 Confirm</button>
+        <button class="btn danger" style="flex:1" onclick="confirmBankruptcy('${m.teamId}')">💀 Confirm Bankrupt</button>
         <button class="btn" onclick="closeModal()">Cancel</button>
       </div>
     </div></div>`;
@@ -925,18 +975,52 @@ window.deleteProp=id=>{
   state.properties=state.properties.filter(p=>p.id!==id);stateChanged();
 };
 
+// ── BANK TRANSACTIONS & GO ──
+window.openBankAdjust=()=>{state.modal={type:'adjustBank'};render();};
+window.adjustBank=(isAdding)=>{
+  const amt=parseInt(document.getElementById('bank-amt')?.value)||0;
+  if(!amt || amt <= 0) return toast('Enter a valid amount', 'error');
+  if(!isAdding && state.board.bankBalance < amt) return toast('Bank does not have that much funds!', 'error');
+  state.board.bankBalance += isAdding ? amt : -amt;
+  state.transactions.push({id:uid(),teamId:'bank',amount:isAdding?amt:-amt,note:isAdding?'Added funds to Bank':'Removed funds from Bank',type:'credit',time:Date.now()});
+  state.modal=null;
+  stateChanged();
+  toast('Bank funds updated', 'success');
+};
+
+window.passGo=(teamId)=>{
+  if (state.board.bankBalance < 200) { toast('Bank has insufficient funds to pay GO salary!', 'error'); return; }
+  const team=state.teams.find(t=>t.id===teamId);
+  if(!team) return;
+  team.balance += 200;
+  state.board.bankBalance -= 200;
+  state.transactions.push({id:uid(),teamId,amount:200,note:'Passed GO (+₹200 from Bank)',type:'credit',time:Date.now()});
+  stateChanged();
+  toast(`₹200 paid to ${team.name} for passing GO!`, 'success');
+};
+
 window.openTransact=(teamId,subtype)=>{state.modal={type:'transact',teamId,subtype};render();};
 window.saveTransact=(teamId,subtype)=>{
   const amount=parseInt(document.getElementById('t-amount')?.value)||0;
   const note=document.getElementById('t-note')?.value?.trim();
   if(!amount){toast('Enter an amount','error');return;}
   const team=state.teams.find(t=>t.id===teamId);if(!team)return;
+  
+  if (subtype==='credit') {
+    if (state.board.bankBalance < amount) { toast('Bank has insufficient funds for this payout!', 'error'); return; }
+    state.board.bankBalance -= amount;
+    team.balance += amount;
+  } else {
+    team.balance -= amount;
+    state.board.bankBalance += amount;
+  }
+  
   const delta=subtype==='credit'?amount:-amount;
-  team.balance+=delta;
-  state.transactions.push({id:uid(),teamId,amount:delta,note,type:subtype,time:Date.now()});
+  state.transactions.push({id:uid(),teamId,amount:delta,note:note||(subtype==='credit'?'Received from Bank':'Paid to Bank'),type:subtype,time:Date.now()});
   state.modal=null;stateChanged();
 };
 
+// ── PROPERTY ASSIGN & BUY ──
 window.openAssign=teamId=>{state.modal={type:'assign',teamId};render();};
 window.toggleAssign=(propId,teamId)=>{
   const p=state.properties.find(x=>x.id===propId);if(!p)return;
@@ -944,6 +1028,23 @@ window.toggleAssign=(propId,teamId)=>{
   state.modal={type:'assign',teamId};stateChanged();
 };
 
+window.openBuyProp=propId=>{state.modal={type:'buyProp',propId};render();};
+window.confirmBuyProp=(propId,teamId)=>{
+  const prop=state.properties.find(p=>p.id===propId);
+  const team=state.teams.find(t=>t.id===teamId);
+  if(!prop||!team)return;
+  if(team.balance<prop.price){toast(`${team.name} has insufficient funds!`, 'error'); return;}
+  
+  team.balance -= prop.price;
+  state.board.bankBalance += prop.price;
+  prop.ownedBy = team.id;
+  prop.mortgaged = false;
+  state.transactions.push({id:uid(),teamId,amount:-prop.price,note:`Bought ${prop.name} from Bank`,type:'debit',time:Date.now()});
+  toast(`🏠 ${team.name} bought ${prop.name}!`, 'success');
+  state.modal=null;stateChanged();
+};
+
+// ── RENT ──
 window.openRent=teamId=>{state.modal={type:'rent',teamId};render();};
 window.payRent=(fromId,propId)=>{
   const prop=state.properties.find(p=>p.id===propId);
@@ -968,8 +1069,12 @@ window.mortgageProp=propId=>{
   if(!prop||!prop.ownedBy||prop.mortgaged)return;
   const owner=state.teams.find(t=>t.id===prop.ownedBy);if(!owner)return;
   const mv=Math.floor((prop.price||0)/2);
+  
+  if (state.board.bankBalance < mv) { toast('Bank has insufficient funds to pay for mortgage!', 'error'); return; }
+  
   prop.mortgaged=true;
   owner.balance+=mv;
+  state.board.bankBalance-=mv;
   state.transactions.push({id:uid(),teamId:owner.id,amount:mv,note:`Mortgage: ${prop.name} — bank pays 50%`,type:'mortgage',time:Date.now()});
   toast(`🔒 ${prop.name} mortgaged — ₹${num(mv)} from bank`,'amber');
   if(state.modal?.type==='mortgage')state.modal={type:'mortgage',teamId:owner.id};
@@ -982,8 +1087,10 @@ window.unmortgageProp=propId=>{
   const owner=state.teams.find(t=>t.id===prop.ownedBy);if(!owner)return;
   const mv=Math.floor((prop.price||0)/2);
   if(owner.balance<mv){toast(`Need ₹${num(mv)} to unmortgage (have ₹${num(owner.balance)})`,'error');return;}
+  
   prop.mortgaged=false;
   owner.balance-=mv;
+  state.board.bankBalance+=mv;
   state.transactions.push({id:uid(),teamId:owner.id,amount:-mv,note:`Unmortgage: ${prop.name}`,type:'unmortgage',time:Date.now()});
   toast(`🔓 ${prop.name} unmortgaged — ₹${num(mv)} paid to bank`,'success');
   if(state.modal?.type==='mortgage')state.modal={type:'mortgage',teamId:owner.id};
@@ -994,7 +1101,7 @@ window.unmortgageProp=propId=>{
 window.promptAuctionForTeam=teamId=>{
   const bankProps=state.properties.filter(p=>!p.ownedBy);
   if(!bankProps.length){toast('No bank-owned properties available for auction','error');return;}
-  toast('Open Properties tab → tap 🔨 Auction on a bank-owned property','');
+  toast('Open Board tab → tap 🔨 Auction on a bank-owned property','');
 };
 
 window.openAuctionForProp=propId=>{
@@ -1022,9 +1129,12 @@ window.finalizeAuction=propId=>{
   const prop=state.properties.find(p=>p.id===propId);
   const winner=state.teams.find(t=>t.id===m.currentBidderId);
   if(!prop||!winner)return;
+  
   winner.balance-=m.currentBid;
+  state.board.bankBalance+=m.currentBid;
   prop.ownedBy=winner.id;
   prop.mortgaged=false;
+  
   state.transactions.push({id:uid(),teamId:winner.id,amount:-m.currentBid,note:`Auction: won ${prop.name} (paid to bank)`,type:'auction',time:Date.now()});
   toast(`🏆 ${winner.name} won ${prop.name} for ₹${num(m.currentBid)}!`,'success');
   state.modal=null;stateChanged();
@@ -1035,10 +1145,16 @@ window.declareBankruptcy=teamId=>{state.modal={type:'bankruptcy',teamId};render(
 window.confirmBankruptcy=teamId=>{
   const team=state.teams.find(t=>t.id===teamId);if(!team)return;
   const tp=state.properties.filter(p=>p.ownedBy===teamId);
+  
+  // Return money to bank
+  if (team.balance > 0) {
+    state.board.bankBalance += team.balance;
+  }
+  
   tp.forEach(p=>{p.ownedBy=null;p.mortgaged=false;});
-  state.transactions.push({id:uid(),teamId,amount:0,note:`💀 Bankruptcy — ${tp.length} properties returned to bank`,type:'bankruptcy',time:Date.now()});
+  state.transactions.push({id:uid(),teamId,amount:0,note:`💀 Bankruptcy — cash and ${tp.length} properties returned to bank`,type:'bankruptcy',time:Date.now()});
   state.teams=state.teams.filter(t=>t.id!==teamId);
-  toast(`💀 ${team.name} bankrupt — ${tp.length} properties returned to bank for auction`,'error');
+  toast(`💀 ${team.name} bankrupt — returned to bank for auction`,'error');
   state.modal=null;stateChanged();
 };
 
@@ -1046,6 +1162,7 @@ window.confirmBankruptcy=teamId=>{
 window.saveBoardSettings=()=>{
   state.board.name=document.getElementById('board-name')?.value?.trim()||state.board.name;
   state.board.startMoney=parseInt(document.getElementById('start-money')?.value)||1500;
+  state.board.bankBalance=parseInt(document.getElementById('start-bank-money')?.value)||0;
   document.getElementById('header-board-name').textContent=state.board.name;
   stateChanged();toast('Settings saved','success');
 };
