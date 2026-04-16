@@ -4,10 +4,11 @@
  * Requires: npm install express cors bcryptjs
  *
  * Supports features (all handled via generic state persistence):
- *  - Mortgage / Unmortgage: property.mortgaged flag, 50% value credited to player
- *  - Auction: bank auction for unowned/bankrupted properties
- *  - Bankruptcy to bank: properties returned to bank, player removed, then auctioned
- *  - Transaction types: rent, credit, debit, mortgage, unmortgage, auction, bankruptcy
+ * - Mortgage / Unmortgage: property.mortgaged flag, 50% value credited to player
+ * - Auction: bank auction for unowned/bankrupted properties
+ * - Bankruptcy to bank: properties returned to bank, player removed, then auctioned
+ * - Transaction types: rent, credit, debit, mortgage, unmortgage, auction, bankruptcy
+ * - Central Bank System: handles payments, purchases, passing GO, and insufficient funds
  */
 
 const express = require('express');
@@ -49,7 +50,7 @@ function writeJSON(file, data) {
 
 // ─── Initial data ─────────────────────────────────────────────────────────────
 const DEFAULT_STATE = {
-  board: { name: 'My Monopoly Board', startMoney: 1500 },
+  board: { name: 'My Monopoly Board', startMoney: 1500, bankBalance: 20580 },
   teams: [],
   properties: [],
   transactions: []
