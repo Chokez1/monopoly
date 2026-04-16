@@ -1,0 +1,1216 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Monopoly Tracker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;1,9..40,300&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0f0f13;
+  --surface:#18181f;
+  --surface2:#22222c;
+  --surface3:#2a2a36;
+  --border:#2e2e3d;
+  --border2:#3a3a4d;
+  --text:#f0effc;
+  --text2:#9898b8;
+  --text3:#5a5a78;
+  --accent:#7c6fff;
+  --accent2:#a093ff;
+  --accent-glow:rgba(124,111,255,.25);
+  --green:#4ade80;--green-bg:rgba(74,222,128,.12);--green-border:rgba(74,222,128,.25);
+  --red:#f87171;--red-bg:rgba(248,113,113,.12);--red-border:rgba(248,113,113,.25);
+  --amber:#fbbf24;--amber-bg:rgba(251,191,36,.12);--amber-border:rgba(251,191,36,.25);
+  --blue:#60a5fa;--blue-bg:rgba(96,165,250,.12);
+  --radius:14px;--radius-sm:9px;--radius-xs:6px;
+  --font-head:'Syne',sans-serif;
+  --font-body:'DM Sans',sans-serif;
+}
+body{font-family:var(--font-body);background:var(--bg);color:var(--text);min-height:100vh;font-size:15px;-webkit-font-smoothing:antialiased}
+
+/* ── Login Screen ── */
+#login-screen{
+  display:flex;align-items:center;justify-content:center;min-height:100vh;padding:20px;
+  background:radial-gradient(ellipse 80% 60% at 50% 0%,rgba(124,111,255,.18) 0%,transparent 70%),var(--bg);
+}
+.login-box{
+  width:100%;max-width:420px;
+  background:var(--surface);border:1px solid var(--border2);border-radius:22px;
+  padding:40px 36px;
+  box-shadow:0 0 80px rgba(124,111,255,.1),0 20px 60px rgba(0,0,0,.5);
+}
+.login-logo{
+  font-family:var(--font-head);font-size:28px;font-weight:800;color:var(--accent2);
+  text-align:center;margin-bottom:4px;letter-spacing:-.5px;
+}
+.login-sub{font-size:13px;color:var(--text3);text-align:center;margin-bottom:32px;font-weight:300}
+.login-tabs{display:flex;background:var(--surface2);border-radius:var(--radius-sm);padding:3px;gap:3px;margin-bottom:24px}
+.login-tab{flex:1;padding:8px;border:none;background:none;color:var(--text2);font-size:13px;border-radius:7px;cursor:pointer;font-family:var(--font-body);font-weight:500;transition:all .15s}
+.login-tab.active{background:var(--surface3);color:var(--text);box-shadow:0 1px 4px rgba(0,0,0,.3)}
+.server-row{margin-bottom:16px}
+.server-row label{font-size:12px;color:var(--text3);display:block;margin-bottom:6px;letter-spacing:.3px;text-transform:uppercase;font-weight:500}
+.server-row input{
+  width:100%;padding:11px 14px;background:var(--surface2);border:1px solid var(--border2);
+  border-radius:var(--radius-sm);color:var(--text);font-family:var(--font-body);font-size:14px;outline:none;
+  transition:border-color .15s,box-shadow .15s;
+}
+.server-row input:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-glow)}
+.login-btn{
+  width:100%;padding:13px;background:var(--accent);color:#fff;border:none;border-radius:var(--radius-sm);
+  font-family:var(--font-head);font-size:15px;font-weight:700;cursor:pointer;letter-spacing:.3px;
+  transition:background .15s,transform .1s,box-shadow .15s;
+  box-shadow:0 4px 20px rgba(124,111,255,.4);
+}
+.login-btn:hover{background:var(--accent2);box-shadow:0 6px 24px rgba(124,111,255,.55)}
+.login-btn:active{transform:scale(.98)}
+.login-error{color:var(--red);font-size:13px;text-align:center;margin-top:12px;padding:8px;background:var(--red-bg);border-radius:var(--radius-xs);border:1px solid var(--red-border)}
+
+/* ── App Shell ── */
+#app{display:none;min-height:100vh;flex-direction:column}
+#app.visible{display:flex}
+
+.header{
+  background:var(--surface);border-bottom:1px solid var(--border);
+  padding:0 20px;height:60px;display:flex;align-items:center;justify-content:space-between;
+  position:sticky;top:0;z-index:100;
+}
+.header-left{display:flex;align-items:center;gap:14px}
+.header-logo{font-family:var(--font-head);font-size:18px;font-weight:800;color:var(--accent2);letter-spacing:-.3px}
+.header-board{font-size:12px;color:var(--text3);font-weight:300;margin-top:1px}
+.header-right{display:flex;align-items:center;gap:8px}
+.sync-dot{width:8px;height:8px;border-radius:50%;background:var(--green);flex-shrink:0;box-shadow:0 0 6px var(--green);transition:background .3s}
+.sync-dot.offline{background:var(--red);box-shadow:0 0 6px var(--red)}
+.sync-dot.syncing{background:var(--amber);box-shadow:0 0 6px var(--amber);animation:pulse 1s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+.icon-btn{
+  background:var(--surface2);border:1px solid var(--border);color:var(--text2);
+  padding:7px 12px;border-radius:var(--radius-xs);cursor:pointer;font-size:12px;
+  display:flex;align-items:center;gap:5px;font-family:var(--font-body);font-weight:500;
+  transition:all .15s;
+}
+.icon-btn:hover{background:var(--surface3);color:var(--text);border-color:var(--border2)}
+
+/* ── Tab bar ── */
+.tab-bar{display:flex;background:var(--surface);border-bottom:1px solid var(--border);overflow-x:auto;scrollbar-width:none}
+.tab-bar::-webkit-scrollbar{display:none}
+.tab{
+  flex:1;min-width:75px;padding:12px 8px;border:none;background:none;
+  color:var(--text3);font-size:12px;cursor:pointer;
+  border-bottom:2px solid transparent;font-family:var(--font-body);font-weight:500;
+  white-space:nowrap;transition:all .15s;letter-spacing:.2px;text-transform:uppercase;
+}
+.tab.active{color:var(--accent2);border-bottom-color:var(--accent);background:rgba(124,111,255,.05)}
+.tab:hover:not(.active){color:var(--text2)}
+
+/* ── Content ── */
+.content{flex:1;padding:16px;overflow-y:auto;max-width:900px;width:100%;margin:0 auto}
+
+/* ── Cards ── */
+.card{
+  background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);
+  padding:16px;margin-bottom:12px;
+}
+.card-title{font-size:11px;color:var(--text3);margin-bottom:10px;font-weight:600;text-transform:uppercase;letter-spacing:.8px;font-family:var(--font-head)}
+
+/* ── Buttons ── */
+.btn{
+  padding:8px 14px;border-radius:var(--radius-xs);border:1px solid var(--border2);
+  background:var(--surface2);color:var(--text);cursor:pointer;font-size:13px;font-weight:500;
+  font-family:var(--font-body);transition:all .15s;
+}
+.btn:hover{background:var(--surface3);border-color:var(--border2)}
+.btn.primary{background:var(--accent);color:#fff;border-color:var(--accent);box-shadow:0 2px 12px rgba(124,111,255,.35)}
+.btn.primary:hover{background:var(--accent2)}
+.btn.danger{background:var(--red-bg);color:var(--red);border-color:var(--red-border)}
+.btn.danger:hover{background:rgba(248,113,113,.2)}
+.btn.success{background:var(--green-bg);color:var(--green);border-color:var(--green-border)}
+.btn.success:hover{background:rgba(74,222,128,.2)}
+.btn.sm{padding:5px 10px;font-size:12px}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+
+/* ── Inputs ── */
+input,select,textarea{
+  width:100%;padding:10px 12px;
+  border:1px solid var(--border2);border-radius:var(--radius-xs);
+  background:var(--surface2);color:var(--text);font-size:14px;outline:none;
+  font-family:var(--font-body);transition:border-color .15s,box-shadow .15s;
+}
+input:focus,select:focus,textarea:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-glow)}
+select option{background:var(--surface2)}
+label{font-size:12px;color:var(--text3);display:block;margin-bottom:5px;font-weight:500;text-transform:uppercase;letter-spacing:.3px}
+.form-row{margin-bottom:12px}
+.row{display:flex;gap:8px;align-items:center}
+
+/* ── Team cards ── */
+.team-card{
+  background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);
+  padding:16px;margin-bottom:12px;position:relative;overflow:hidden;
+  transition:border-color .2s,box-shadow .2s;
+}
+.team-card:hover{border-color:var(--border2);box-shadow:0 4px 20px rgba(0,0,0,.3)}
+.team-card::before{content:'';position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--team-color,var(--accent))}
+.team-name{font-family:var(--font-head);font-size:17px;font-weight:700;color:var(--team-color)}
+.team-balance{font-size:26px;font-weight:800;font-family:var(--font-head);margin:4px 0;letter-spacing:-.5px}
+.team-props-count{font-size:12px;color:var(--text3)}
+
+/* ── Leaderboard ── */
+.lb-card{
+  background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);
+  overflow:hidden;margin-bottom:12px;
+}
+.lb-header{padding:14px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
+.lb-title{font-family:var(--font-head);font-size:14px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.5px}
+.lb-row{
+  display:flex;align-items:center;padding:14px 16px;border-bottom:1px solid var(--border);
+  gap:14px;transition:background .15s;
+}
+.lb-row:last-child{border-bottom:none}
+.lb-row:hover{background:var(--surface2)}
+.lb-rank{
+  font-family:var(--font-head);font-size:22px;font-weight:800;color:var(--text3);
+  width:36px;text-align:center;flex-shrink:0;
+}
+.lb-rank.gold{color:#fbbf24;text-shadow:0 0 20px rgba(251,191,36,.5)}
+.lb-rank.silver{color:#94a3b8}
+.lb-rank.bronze{color:#b45309}
+.lb-info{flex:1;min-width:0}
+.lb-team-name{font-family:var(--font-head);font-size:15px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lb-sub{font-size:12px;color:var(--text3);margin-top:2px}
+.lb-money{font-family:var(--font-head);font-size:18px;font-weight:800;text-align:right;flex-shrink:0}
+.lb-bar-wrap{height:4px;background:var(--surface3);border-radius:2px;margin-top:6px;overflow:hidden}
+.lb-bar{height:100%;border-radius:2px;transition:width .6s cubic-bezier(.4,0,.2,1)}
+.lb-props-preview{display:flex;flex-wrap:wrap;gap:4px;margin-top:8px}
+
+/* ── Properties ── */
+.prop-chip{
+  display:inline-flex;align-items:center;gap:4px;padding:3px 8px;
+  border-radius:20px;font-size:11px;border:1px solid var(--border);background:var(--surface2);color:var(--text2);
+  font-weight:500;
+}
+.color-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+
+.search-bar{position:relative;margin-bottom:14px}
+.search-bar input{padding-left:36px;background:var(--surface)}
+.search-icon{position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--text3);font-size:14px;pointer-events:none}
+
+.prop-row{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:12px;border:1px solid var(--border);border-radius:var(--radius-sm);
+  margin-bottom:6px;background:var(--surface);transition:background .15s;
+}
+.prop-row:hover{background:var(--surface2)}
+.prop-left{display:flex;align-items:center;gap:12px}
+.color-bar{width:14px;height:36px;border-radius:4px;flex-shrink:0}
+.prop-name{font-size:14px;font-weight:500;font-family:var(--font-head)}
+.prop-meta{font-size:12px;color:var(--text3);margin-top:2px}
+.prop-owner{font-size:11px;padding:3px 9px;border-radius:20px;border:1px solid;font-weight:600}
+
+/* ── Transactions ── */
+.trans-row{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:10px 0;border-bottom:1px solid var(--border);gap:10px;
+}
+.trans-row:last-child{border-bottom:none}
+.trans-amount{font-family:var(--font-head);font-weight:700;font-size:15px;flex-shrink:0}
+.trans-amount.pos{color:var(--green)}
+.trans-amount.neg{color:var(--red)}
+.trans-note{font-size:13px;color:var(--text2);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.trans-time{font-size:11px;color:var(--text3);flex-shrink:0}
+.trans-team{font-size:11px;font-weight:600;margin-bottom:2px}
+
+/* ── Modal ── */
+.modal-overlay{
+  position:fixed;inset:0;background:rgba(0,0,0,.7);backdrop-filter:blur(4px);
+  display:flex;align-items:flex-end;justify-content:center;z-index:200;animation:fadeIn .15s ease;
+}
+.modal-overlay.center{align-items:center}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+.modal{
+  background:var(--surface);border:1px solid var(--border2);
+  border-radius:var(--radius) var(--radius) 0 0;
+  padding:24px;width:100%;max-height:90vh;overflow-y:auto;
+  animation:slideUp .2s cubic-bezier(.4,0,.2,1);
+}
+@keyframes slideUp{from{transform:translateY(20px);opacity:0}to{transform:translateY(0);opacity:1}}
+.modal.center{border-radius:var(--radius);width:calc(100% - 32px);max-width:500px;animation:scaleIn .18s cubic-bezier(.4,0,.2,1)}
+@keyframes scaleIn{from{transform:scale(.96);opacity:0}to{transform:scale(1);opacity:1}}
+.modal-title{font-family:var(--font-head);font-size:20px;font-weight:700;margin-bottom:18px}
+.modal-close{float:right;background:var(--surface2);border:1px solid var(--border);font-size:16px;cursor:pointer;color:var(--text2);line-height:1;width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center}
+.modal-close:hover{color:var(--text);background:var(--surface3)}
+
+/* ── Badges ── */
+.badge{display:inline-block;padding:3px 9px;border-radius:20px;font-size:11px;font-weight:600}
+.badge.owned{background:var(--green-bg);color:var(--green);border:1px solid var(--green-border)}
+.badge.free{background:var(--surface2);color:var(--text3);border:1px solid var(--border)}
+.badge.mortgaged{background:var(--amber-bg);color:var(--amber);border:1px solid var(--amber-border)}
+
+/* ── Stats grid ── */
+.stats-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px}
+.stat-box{background:var(--surface2);border-radius:var(--radius-sm);padding:12px;text-align:center;border:1px solid var(--border)}
+.stat-num{font-family:var(--font-head);font-size:24px;font-weight:800}
+.stat-label{font-size:11px;color:var(--text3);margin-top:3px;font-weight:500;text-transform:uppercase;letter-spacing:.4px}
+
+/* ── FAB ── */
+.fab{
+  position:fixed;bottom:24px;right:24px;width:56px;height:56px;border-radius:50%;
+  background:var(--accent);color:#fff;border:none;font-size:26px;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+  box-shadow:0 4px 20px rgba(124,111,255,.5);z-index:50;
+  transition:transform .15s,box-shadow .15s;font-family:var(--font-body);
+}
+.fab:hover{transform:scale(1.08);box-shadow:0 6px 28px rgba(124,111,255,.65)}
+.fab:active{transform:scale(.95)}
+
+/* ── Empty state ── */
+.empty{text-align:center;color:var(--text3);padding:48px 24px;font-size:14px;line-height:1.6}
+.empty-icon{font-size:40px;margin-bottom:12px;display:block}
+.group-header{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:var(--text3);margin:18px 0 8px;font-family:var(--font-head)}
+
+/* ── View toggle ── */
+.view-toggle{display:flex;background:var(--surface2);border-radius:var(--radius-xs);padding:3px;gap:2px}
+.view-btn{flex:1;padding:7px;border:none;background:none;border-radius:5px;font-size:12px;cursor:pointer;color:var(--text2);font-weight:500;font-family:var(--font-body);transition:all .15s}
+.view-btn.active{background:var(--surface3);color:var(--text);box-shadow:0 1px 3px rgba(0,0,0,.3)}
+
+/* ── Toasts ── */
+#toast-container{position:fixed;bottom:90px;left:50%;transform:translateX(-50%);z-index:500;display:flex;flex-direction:column;align-items:center;gap:8px;pointer-events:none}
+.toast{
+  background:var(--surface3);border:1px solid var(--border2);color:var(--text);
+  padding:10px 18px;border-radius:30px;font-size:13px;font-weight:500;
+  box-shadow:0 4px 16px rgba(0,0,0,.4);animation:toastIn .25s cubic-bezier(.4,0,.2,1);
+  white-space:nowrap;
+}
+.toast.success{background:var(--green-bg);color:var(--green);border-color:var(--green-border)}
+.toast.error{background:var(--red-bg);color:var(--red);border-color:var(--red-border)}
+@keyframes toastIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+
+/* ── Web layout ── */
+@media(min-width:768px){
+  .web-layout{display:flex;flex-direction:row}
+  .web-sidebar{width:220px;min-width:220px;background:var(--surface);border-right:1px solid var(--border);height:calc(100vh - 60px);position:sticky;top:60px;overflow-y:auto}
+  .web-sidebar .tab-bar{flex-direction:column;border-bottom:none;height:auto}
+  .web-sidebar .tab{border-bottom:none;border-left:3px solid transparent;text-align:left;min-width:unset;padding:14px 20px;border-radius:0}
+  .web-sidebar .tab.active{border-left-color:var(--accent);border-bottom:none}
+  .web-main{flex:1;overflow:auto;min-height:calc(100vh - 60px)}
+  .modal-overlay{align-items:center}
+  .modal{border-radius:var(--radius);max-width:520px;margin:0 auto}
+}
+
+/* ── Online users indicator ── */
+.online-badge{
+  display:inline-flex;align-items:center;gap:5px;
+  background:var(--green-bg);border:1px solid var(--green-border);color:var(--green);
+  padding:4px 10px;border-radius:20px;font-size:11px;font-weight:600;
+}
+</style>
+</head>
+<body>
+
+<!-- Login Screen -->
+<div id="login-screen">
+  <div class="login-box">
+    <div class="login-logo">🎲 Monopoly</div>
+    <div class="login-sub">Game Tracker — Live &amp; Synced</div>
+    <div style="margin-bottom:18px">
+      <label>Server URL</label>
+      <input type="url" id="server-url" placeholder="http://your-server-ip:3000" value="">
+      <div style="font-size:11px;color:var(--text3);margin-top:5px">Enter the address where your server is running</div>
+    </div>
+    <div class="login-tabs">
+      <button class="login-tab active" id="tab-login" onclick="switchAuthTab('login')">Sign In</button>
+      <button class="login-tab" id="tab-register" onclick="switchAuthTab('register')">Register</button>
+    </div>
+    <div class="server-row">
+      <label>Username</label>
+      <input type="text" id="auth-username" placeholder="Enter username" autocomplete="username">
+    </div>
+    <div class="server-row">
+      <label>Password</label>
+      <input type="password" id="auth-password" placeholder="Enter password" autocomplete="current-password" onkeydown="if(event.key==='Enter')doAuth()">
+    </div>
+    <div id="auth-error" style="display:none" class="login-error"></div>
+    <button class="login-btn" id="auth-btn" onclick="doAuth()">Sign In</button>
+  </div>
+</div>
+
+<!-- App -->
+<div id="app">
+  <div class="header">
+    <div class="header-left">
+      <div>
+        <div class="header-logo">🎲 Monopoly</div>
+        <div class="header-board" id="header-board-name"></div>
+      </div>
+    </div>
+    <div class="header-right">
+      <div class="sync-dot" id="sync-dot" title="Connection status"></div>
+      <span style="font-size:11px;color:var(--text3)" id="sync-label">Connected</span>
+      <button class="icon-btn" onclick="doLogout()">Sign Out</button>
+    </div>
+  </div>
+  <div id="app-body" class="web-layout">
+    <div id="sidebar" class="web-sidebar" style="display:none"></div>
+    <div class="web-main">
+      <div id="tabbar-mobile"></div>
+      <div class="content" id="content"></div>
+    </div>
+  </div>
+  <div id="fab-wrap"></div>
+</div>
+
+<div id="modal-wrap"></div>
+<div id="toast-container"></div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════════════
+// CONFIG & CONSTANTS
+// ═══════════════════════════════════════════════════════════════════════
+const COLORS = ['#f87171','#fbbf24','#34d399','#f472b6','#818cf8','#60a5fa','#a78bfa','#4ade80','#fb923c','#e879f9','#2dd4bf','#facc15'];
+const COLOR_NAMES = ['Red','Amber','Emerald','Pink','Indigo','Blue','Violet','Green','Orange','Fuchsia','Teal','Yellow'];
+
+let API = '';
+let TOKEN = '';
+let AUTH_TAB = 'login';
+
+let state = {
+  activeTab: 'leaderboard',
+  board: {name:'My Monopoly Board', startMoney:1500},
+  teams: [],
+  properties: [],
+  transactions: [],
+  modal: null,
+  propSearch: ''
+};
+
+let sseSource = null;
+let syncing = false;
+
+// ═══════════════════════════════════════════════════════════════════════
+// AUTH
+// ═══════════════════════════════════════════════════════════════════════
+function switchAuthTab(t) {
+  AUTH_TAB = t;
+  document.getElementById('tab-login').classList.toggle('active', t==='login');
+  document.getElementById('tab-register').classList.toggle('active', t==='register');
+  document.getElementById('auth-btn').textContent = t==='login' ? 'Sign In' : 'Create Account';
+  document.getElementById('auth-error').style.display = 'none';
+}
+
+async function doAuth() {
+  const serverUrl = document.getElementById('server-url').value.trim().replace(/\/$/, '');
+  const username = document.getElementById('auth-username').value.trim();
+  const password = document.getElementById('auth-password').value;
+  const errEl = document.getElementById('auth-error');
+  errEl.style.display = 'none';
+
+  if (!serverUrl) { showAuthError('Please enter the server URL'); return; }
+  if (!username || !password) { showAuthError('Enter username and password'); return; }
+
+  API = serverUrl;
+  const endpoint = AUTH_TAB === 'login' ? '/api/login' : '/api/register';
+  document.getElementById('auth-btn').textContent = '...';
+  document.getElementById('auth-btn').disabled = true;
+
+  try {
+    const res = await fetch(API + endpoint, {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({username, password})
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Auth failed');
+    TOKEN = data.token;
+    localStorage.setItem('mono_api', API);
+    localStorage.setItem('mono_token', TOKEN);
+    startApp();
+  } catch(e) {
+    showAuthError(e.message);
+  } finally {
+    document.getElementById('auth-btn').disabled = false;
+    document.getElementById('auth-btn').textContent = AUTH_TAB === 'login' ? 'Sign In' : 'Create Account';
+  }
+}
+
+function showAuthError(msg) {
+  const el = document.getElementById('auth-error');
+  el.textContent = msg;
+  el.style.display = 'block';
+}
+
+async function doLogout() {
+  try { await api('POST', '/api/logout'); } catch(e) {}
+  TOKEN = '';
+  localStorage.removeItem('mono_token');
+  if (sseSource) { sseSource.close(); sseSource = null; }
+  document.getElementById('login-screen').style.display = 'flex';
+  document.getElementById('app').classList.remove('visible');
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// API HELPERS
+// ═══════════════════════════════════════════════════════════════════════
+async function api(method, path, body) {
+  const opts = {
+    method,
+    headers: {'Content-Type':'application/json', 'Authorization':'Bearer '+TOKEN}
+  };
+  if (body) opts.body = JSON.stringify(body);
+  const res = await fetch(API + path, opts);
+  if (!res.ok) {
+    const d = await res.json().catch(()=>({}));
+    throw new Error(d.error || 'API error');
+  }
+  return res.json();
+}
+
+async function saveToServer(newState) {
+  setSyncing(true);
+  try {
+    await api('POST', '/api/state', newState);
+    setSyncing(false, true);
+  } catch(e) {
+    setSyncing(false, false);
+    toast('Sync failed: ' + e.message, 'error');
+  }
+}
+
+function setSyncing(isSyncing, ok) {
+  const dot = document.getElementById('sync-dot');
+  const label = document.getElementById('sync-label');
+  if (!dot) return;
+  if (isSyncing) {
+    dot.className = 'sync-dot syncing';
+    label.textContent = 'Saving...';
+  } else if (ok === true) {
+    dot.className = 'sync-dot';
+    label.textContent = 'Saved';
+    setTimeout(() => { if(label) label.textContent = 'Live'; }, 1500);
+  } else if (ok === false) {
+    dot.className = 'sync-dot offline';
+    label.textContent = 'Offline';
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// SSE - REAL-TIME SYNC
+// ═══════════════════════════════════════════════════════════════════════
+function connectSSE() {
+  if (sseSource) sseSource.close();
+  // SSE needs auth via URL param since EventSource can't set headers
+  sseSource = new EventSource(`${API}/api/events?token=${TOKEN}`);
+  
+  sseSource.addEventListener('stateUpdate', (e) => {
+    const newState = JSON.parse(e.data);
+    state = {...state, ...newState, modal: state.modal, activeTab: state.activeTab, propSearch: state.propSearch};
+    render();
+    document.getElementById('header-board-name').textContent = state.board?.name || '';
+  });
+
+  sseSource.onopen = () => {
+    const dot = document.getElementById('sync-dot');
+    const label = document.getElementById('sync-label');
+    if (dot) { dot.className = 'sync-dot'; }
+    if (label) { label.textContent = 'Live'; }
+  };
+
+  sseSource.onerror = () => {
+    const dot = document.getElementById('sync-dot');
+    const label = document.getElementById('sync-label');
+    if (dot) dot.className = 'sync-dot offline';
+    if (label) label.textContent = 'Reconnecting...';
+    // EventSource auto-reconnects
+  };
+}
+
+// Patch the EventSource to pass token — we'll use URL param on server
+// Update server.js to read from query param too
+function patchSSEAuth() {
+  // The server needs to accept token via query string for SSE
+  // This is handled in the server with a small addition
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// APP START
+// ═══════════════════════════════════════════════════════════════════════
+async function startApp() {
+  document.getElementById('login-screen').style.display = 'none';
+  document.getElementById('app').classList.add('visible');
+  
+  try {
+    const serverState = await api('GET', '/api/state');
+    state = {...state, ...serverState, modal: null};
+    document.getElementById('header-board-name').textContent = state.board?.name || '';
+  } catch(e) {
+    toast('Could not load game state', 'error');
+  }
+
+  render();
+  connectSSE();
+}
+
+// Try auto-login from stored token
+window.addEventListener('load', async () => {
+  const savedApi = localStorage.getItem('mono_api');
+  const savedToken = localStorage.getItem('mono_token');
+  const savedUrl = document.getElementById('server-url');
+  
+  if (savedApi) savedUrl.value = savedApi;
+  
+  if (savedApi && savedToken) {
+    API = savedApi;
+    TOKEN = savedToken;
+    try {
+      await api('GET', '/api/state'); // test token
+      startApp();
+      return;
+    } catch(e) {
+      TOKEN = '';
+      localStorage.removeItem('mono_token');
+    }
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════════
+// RENDER
+// ═══════════════════════════════════════════════════════════════════════
+const TABS = [
+  {id:'leaderboard', label:'🏆 Leaderboard'},
+  {id:'teams', label:'👥 Teams'},
+  {id:'properties', label:'🏠 Properties'},
+  {id:'board', label:'📋 Board'},
+  {id:'transactions', label:'💸 Log'},
+  {id:'settings', label:'⚙️ Settings'},
+];
+
+function render() {
+  // Sidebar (desktop)
+  const sidebar = document.getElementById('sidebar');
+  if (sidebar) {
+    sidebar.style.display = '';
+    sidebar.innerHTML = `<div style="padding:0">${tabsHTML(true)}</div>`;
+  }
+  // Mobile tabbar
+  const tabbarEl = document.getElementById('tabbar-mobile');
+  if (tabbarEl) tabbarEl.innerHTML = tabsHTML(false);
+  // Content
+  document.getElementById('content').innerHTML = contentHTML();
+  // FAB
+  const fab = document.getElementById('fab-wrap');
+  if (fab && state.activeTab !== 'settings' && state.activeTab !== 'leaderboard' && state.activeTab !== 'board' && state.activeTab !== 'transactions') {
+    fab.innerHTML = `<button class="fab" id="fab-btn">+</button>`;
+    document.getElementById('fab-btn').onclick = onFab;
+  } else if (fab) {
+    fab.innerHTML = '';
+  }
+  // Modal
+  document.getElementById('modal-wrap').innerHTML = modalHTML();
+}
+
+function tabsHTML(sidebar) {
+  return `<div class="tab-bar">${TABS.map(t=>`
+    <button class="tab${state.activeTab===t.id?' active':''}" onclick="setTab('${t.id}')">
+      ${t.label}
+    </button>`).join('')}
+  </div>`;
+}
+
+function contentHTML() {
+  switch(state.activeTab) {
+    case 'leaderboard': return leaderboardHTML();
+    case 'teams': return teamsHTML();
+    case 'properties': return propertiesHTML();
+    case 'board': return boardHTML();
+    case 'transactions': return transactionsHTML();
+    case 'settings': return settingsHTML();
+  }
+  return '';
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// LEADERBOARD
+// ═══════════════════════════════════════════════════════════════════════
+function leaderboardHTML() {
+  if (!state.teams.length) return `<div class="empty"><span class="empty-icon">🏆</span>No teams yet.<br>Go to Teams tab and add players.</div>`;
+  
+  const teamStats = state.teams.map(t => {
+    const tProps = state.properties.filter(p => p.ownedBy === t.id);
+    const tValue = tProps.reduce((a, p) => a + (p.price||0), 0);
+    return {team:t, props:tProps, propCount:tProps.length, propValue:tValue, balance:t.balance, total:t.balance + tValue};
+  }).sort((a,b) => b.total - a.total);
+
+  const maxTotal = teamStats[0]?.total || 1;
+  const totalMoney = teamStats.reduce((a,s) => a + s.balance, 0);
+  const totalPropVal = teamStats.reduce((a,s) => a + s.propValue, 0);
+
+  return `
+  <div style="margin-bottom:16px">
+    <div style="font-family:var(--font-head);font-size:22px;font-weight:800;margin-bottom:4px">🏆 Leaderboard</div>
+    <div style="font-size:13px;color:var(--text3)">Total money in game: <strong style="color:var(--text)">₹${num(totalMoney)}</strong> · Property value: <strong style="color:var(--text)">₹${num(totalPropVal)}</strong></div>
+  </div>
+  <div class="lb-card">
+    ${teamStats.map((s,i) => {
+      const rankClass = i===0?'gold':i===1?'silver':i===2?'bronze':'';
+      const rankEmoji = i===0?'🥇':i===1?'🥈':i===2?'🥉':`#${i+1}`;
+      const pct = Math.max(4, Math.round((s.total / maxTotal) * 100));
+      return `
+      <div class="lb-row">
+        <div class="lb-rank ${rankClass}">${rankEmoji}</div>
+        <div style="width:10px;height:10px;border-radius:50%;background:${s.team.color};flex-shrink:0;box-shadow:0 0 8px ${s.team.color}88"></div>
+        <div class="lb-info">
+          <div class="lb-team-name" style="color:${s.team.color}">${esc(s.team.name)}</div>
+          <div class="lb-sub">
+            💰 Cash: ₹${num(s.balance)} · 🏠 ${s.propCount} prop${s.propCount!==1?'s':''} (₹${num(s.propValue)})
+          </div>
+          <div class="lb-bar-wrap">
+            <div class="lb-bar" style="width:${pct}%;background:${s.team.color}"></div>
+          </div>
+          ${s.props.length ? `<div class="lb-props-preview">
+            ${s.props.slice(0,6).map(p=>`<span class="prop-chip"><span class="color-dot" style="background:${COLORS[p.colorIdx??0]}"></span>${esc(p.name)}</span>`).join('')}
+            ${s.props.length > 6 ? `<span class="prop-chip">+${s.props.length-6} more</span>` : ''}
+          </div>` : ''}
+        </div>
+        <div>
+          <div class="lb-money" style="color:${s.team.color}">₹${num(s.total)}</div>
+          <div style="font-size:10px;color:var(--text3);text-align:right;margin-top:2px">NET WORTH</div>
+        </div>
+      </div>`;
+    }).join('')}
+  </div>`;
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// TEAMS
+// ═══════════════════════════════════════════════════════════════════════
+function teamsHTML() {
+  if (!state.teams.length) return `<div class="empty"><span class="empty-icon">👥</span>No teams yet.<br>Tap + to add your first team.</div>`;
+  return state.teams.map(team => {
+    const props = state.properties.filter(p => p.ownedBy === team.id);
+    return `<div class="team-card" style="--team-color:${team.color}">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px">
+        <div>
+          <div class="team-name">${esc(team.name)}</div>
+          <div class="team-balance" style="color:var(--text)">₹${num(team.balance)}</div>
+          <div class="team-props-count">${props.length} propert${props.length!==1?'ies':'y'}</div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end">
+          <div style="display:flex;gap:5px">
+            <button class="btn sm success" onclick="openTransact('${team.id}','credit')">+ Credit</button>
+            <button class="btn sm danger" onclick="openTransact('${team.id}','debit')">− Debit</button>
+          </div>
+          <button class="btn sm" onclick="openRent('${team.id}')">Pay Rent</button>
+        </div>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:10px">
+        ${props.map(p=>`<span class="prop-chip"><span class="color-dot" style="background:${COLORS[p.colorIdx??0]}"></span>${esc(p.name)}</span>`).join('')}
+        ${!props.length?`<span style="font-size:12px;color:var(--text3)">No properties owned</span>`:''}
+      </div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;padding-top:10px;border-top:1px solid var(--border)">
+        <button class="btn sm" onclick="openAssign('${team.id}')">📦 Assign Property</button>
+        <button class="btn sm" onclick="editTeam('${team.id}')">✏️ Edit</button>
+        <button class="btn sm danger" onclick="deleteTeam('${team.id}')">Remove</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// PROPERTIES
+// ═══════════════════════════════════════════════════════════════════════
+function propertiesHTML() {
+  const q = (state.propSearch||'').toLowerCase();
+  const grouped = {};
+  state.properties.forEach(p => {
+    if (q && !p.name.toLowerCase().includes(q) && !(p.group||'').toLowerCase().includes(q)) return;
+    const g = p.group || 'Ungrouped';
+    if (!grouped[g]) grouped[g] = [];
+    grouped[g].push(p);
+  });
+  const groups = Object.entries(grouped);
+  if (!state.properties.length) return `<div class="empty"><span class="empty-icon">🏠</span>No properties yet.<br>Tap + to add properties.</div>`;
+  if (!groups.length) return `<div>
+    <div class="search-bar"><span class="search-icon">🔍</span><input type="text" placeholder="Search properties..." value="${esc(state.propSearch||'')}" oninput="searchProps(this.value)"></div>
+    <div class="empty">No matches found.</div></div>`;
+  return `<div>
+    <div class="search-bar"><span class="search-icon">🔍</span><input type="text" placeholder="Search..." value="${esc(state.propSearch||'')}" oninput="searchProps(this.value)"></div>
+    ${groups.map(([gname,props])=>`
+      <div class="group-header">${esc(gname)}</div>
+      ${props.map(p=>{
+        const owner = p.ownedBy ? state.teams.find(t=>t.id===p.ownedBy) : null;
+        return `<div class="prop-row">
+          <div class="prop-left">
+            <div class="color-bar" style="background:${COLORS[p.colorIdx??0]}"></div>
+            <div>
+              <div class="prop-name">${esc(p.name)}</div>
+              <div class="prop-meta">₹${num(p.price)} · Rent ₹${num(p.rent)}</div>
+            </div>
+          </div>
+          <div style="display:flex;flex-direction:column;align-items:flex-end;gap:5px">
+            ${owner?`<span class="prop-owner" style="color:${owner.color};border-color:${owner.color}44;background:${owner.color}18">${esc(owner.name)}</span>`:`<span class="badge free">Available</span>`}
+            ${p.mortgaged?`<span class="badge mortgaged">Mortgaged</span>`:''}
+            <div style="display:flex;gap:4px">
+              <button class="btn sm" onclick="editProp('${p.id}')">Edit</button>
+              <button class="btn sm danger" onclick="deleteProp('${p.id}')">✕</button>
+            </div>
+          </div>
+        </div>`;
+      }).join('')}
+    `).join('')}
+  </div>`;
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// BOARD OVERVIEW
+// ═══════════════════════════════════════════════════════════════════════
+function boardHTML() {
+  const totalProps = state.properties.length;
+  const ownedProps = state.properties.filter(p=>p.ownedBy).length;
+  const totalValue = state.properties.reduce((a,p)=>a+(p.price||0),0);
+  const totalCash = state.teams.reduce((a,t)=>a+t.balance,0);
+
+  return `<div>
+    <div class="card">
+      <div class="card-title">Board Overview</div>
+      <div class="stats-grid">
+        <div class="stat-box"><div class="stat-num">${totalProps}</div><div class="stat-label">Properties</div></div>
+        <div class="stat-box"><div class="stat-num">${ownedProps}</div><div class="stat-label">Owned</div></div>
+        <div class="stat-box"><div class="stat-num">${state.teams.length}</div><div class="stat-label">Teams</div></div>
+        <div class="stat-box"><div class="stat-num" style="font-size:16px">₹${num(totalValue)}</div><div class="stat-label">Board Value</div></div>
+      </div>
+      <div style="margin-top:10px;padding:10px;background:var(--surface2);border-radius:var(--radius-sm);border:1px solid var(--border)">
+        <div style="font-size:12px;color:var(--text3);margin-bottom:4px;text-transform:uppercase;letter-spacing:.4px;font-weight:600">Total Cash in Game</div>
+        <div style="font-family:var(--font-head);font-size:22px;font-weight:800;color:var(--green)">₹${num(totalCash)}</div>
+      </div>
+    </div>
+    
+    <div class="card" style="cursor:pointer" onclick="setTab('leaderboard')">
+      <div class="card-title">🏆 Leaderboard Preview</div>
+      ${state.teams.length ? 
+        [...state.teams].sort((a,b)=>{
+          const av = state.properties.filter(p=>p.ownedBy===a.id).reduce((s,p)=>s+(p.price||0),0);
+          const bv = state.properties.filter(p=>p.ownedBy===b.id).reduce((s,p)=>s+(p.price||0),0);
+          return (b.balance+bv)-(a.balance+av);
+        }).map((t,i)=>{
+          const tv = state.properties.filter(p=>p.ownedBy===t.id).reduce((s,p)=>s+(p.price||0),0);
+          return `<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)${i===state.teams.length-1?';border:none':''}">
+            <span style="font-family:var(--font-head);font-weight:800;color:var(--text3);font-size:13px;width:20px">#${i+1}</span>
+            <div style="width:8px;height:8px;border-radius:50%;background:${t.color};box-shadow:0 0 6px ${t.color}88"></div>
+            <div style="flex:1;font-weight:600;font-size:14px">${esc(t.name)}</div>
+            <div style="font-family:var(--font-head);font-weight:700;color:${t.color}">₹${num(t.balance+tv)}</div>
+          </div>`;
+        }).join('')
+        : `<div style="color:var(--text3);font-size:13px">No teams yet</div>`}
+      <div style="font-size:12px;color:var(--accent2);margin-top:10px;text-align:center">Tap to see full leaderboard →</div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Color Groups</div>
+      ${getColorGroups().length ?
+        getColorGroups().map(g=>`
+          <div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)">
+            <div style="width:14px;height:14px;border-radius:3px;background:${g.color};flex-shrink:0"></div>
+            <div style="flex:1;font-size:14px">${g.name}</div>
+            <div style="font-size:13px;color:var(--text3)">${g.count} properties</div>
+          </div>
+        `).join('')
+        : `<div style="color:var(--text3);font-size:13px">No properties added yet.</div>`}
+    </div>
+  </div>`;
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// TRANSACTIONS LOG
+// ═══════════════════════════════════════════════════════════════════════
+function transactionsHTML() {
+  if (!state.transactions.length) return `<div class="empty"><span class="empty-icon">💸</span>No transactions yet.</div>`;
+  const sorted = [...state.transactions].sort((a,b)=>b.time-a.time);
+  return `<div class="card">
+    <div class="card-title">Transaction Log (${sorted.length})</div>
+    ${sorted.slice(0,100).map(tx=>{
+      const team = state.teams.find(t=>t.id===tx.teamId);
+      return `<div class="trans-row">
+        <div style="min-width:0;flex:1">
+          <div class="trans-team" style="color:${team?.color||'var(--text3)'}">${esc(team?.name||'Unknown')}</div>
+          <div class="trans-note">${esc(tx.note||tx.type||'Transaction')}</div>
+        </div>
+        <div style="text-align:right">
+          <div class="trans-amount ${tx.amount>=0?'pos':'neg'}">${tx.amount>=0?'+':''}₹${num(Math.abs(tx.amount))}</div>
+          <div class="trans-time">${formatTime(tx.time)}</div>
+        </div>
+      </div>`;
+    }).join('')}
+  </div>`;
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// SETTINGS
+// ═══════════════════════════════════════════════════════════════════════
+function settingsHTML() {
+  return `<div>
+    <div class="card">
+      <div class="card-title">Board Settings</div>
+      <div class="form-row" style="margin-top:8px">
+        <label>Board Name</label>
+        <input type="text" id="board-name" value="${esc(state.board.name)}" oninput="state.board.name=this.value;document.getElementById('header-board-name').textContent=this.value">
+      </div>
+      <div class="form-row">
+        <label>Starting Money (₹)</label>
+        <input type="number" id="start-money" value="${state.board.startMoney}" oninput="state.board.startMoney=parseInt(this.value)||0">
+      </div>
+      <button class="btn primary" style="margin-top:6px" onclick="saveBoardSettings()">Save Settings</button>
+    </div>
+    <div class="card">
+      <div class="card-title">Data</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
+        <button class="btn" onclick="exportData()">📥 Export JSON</button>
+        <button class="btn danger" onclick="resetAll()">⚠️ Reset All Data</button>
+      </div>
+      <div style="font-size:12px;color:var(--text3);margin-top:10px">Exporting saves a local backup. Reset will permanently delete all game data.</div>
+    </div>
+    <div class="card">
+      <div class="card-title">Connection</div>
+      <div style="font-size:13px;color:var(--text2);margin-top:4px">Server: <code style="color:var(--accent2)">${API}</code></div>
+      <div style="font-size:12px;color:var(--text3);margin-top:6px">Data is stored on your server and synced live to all connected browsers.</div>
+    </div>
+  </div>`;
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// MODAL
+// ═══════════════════════════════════════════════════════════════════════
+function modalHTML() {
+  if (!state.modal) return '';
+  const m = state.modal;
+
+  if (m.type==='addTeam'||m.type==='editTeam') {
+    const t = m.team||{name:'',balance:state.board.startMoney,color:COLORS[state.teams.length%COLORS.length]};
+    return `<div class="modal-overlay" onclick="closeModalBg(event)">
+      <div class="modal center">
+        <button class="modal-close" onclick="closeModal()">✕</button>
+        <div class="modal-title">${m.type==='addTeam'?'Add Team':'Edit Team'}</div>
+        <div class="form-row"><label>Team Name</label><input type="text" id="m-name" value="${esc(t.name)}" placeholder="e.g. Team Alpha" autofocus></div>
+        <div class="form-row"><label>Starting Balance (₹)</label><input type="number" id="m-balance" value="${t.balance}"></div>
+        <div class="form-row"><label>Team Color</label>
+          <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:6px">
+            ${COLORS.map((c,i)=>`<div onclick="selectColor(this,'m-color','${c}')" class="color-swatch" style="width:30px;height:30px;border-radius:50%;background:${c};cursor:pointer;outline:${t.color===c?'3px solid var(--accent)':'none'};outline-offset:3px;transition:outline .15s"></div>`).join('')}
+          </div>
+          <input type="hidden" id="m-color" value="${t.color}">
+        </div>
+        <div style="display:flex;gap:8px;margin-top:18px">
+          <button class="btn primary" style="flex:1" onclick="${m.type==='addTeam'?'saveAddTeam()':'saveEditTeam(\''+m.teamId+'\')'}">Save</button>
+          <button class="btn" onclick="closeModal()">Cancel</button>
+        </div>
+      </div></div>`;
+  }
+
+  if (m.type==='addProp'||m.type==='editProp') {
+    const p = m.prop||{name:'',price:200,rent:20,group:'',colorIdx:0,mortgaged:false};
+    const groups = [...new Set(state.properties.map(x=>x.group).filter(Boolean))];
+    return `<div class="modal-overlay" onclick="closeModalBg(event)">
+      <div class="modal center">
+        <button class="modal-close" onclick="closeModal()">✕</button>
+        <div class="modal-title">${m.type==='addProp'?'Add Property':'Edit Property'}</div>
+        <div class="form-row"><label>Property Name</label><input type="text" id="p-name" value="${esc(p.name)}" placeholder="e.g. Marina Beach" autofocus></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <div class="form-row"><label>Price (₹)</label><input type="number" id="p-price" value="${p.price}"></div>
+          <div class="form-row"><label>Rent (₹)</label><input type="number" id="p-rent" value="${p.rent}"></div>
+        </div>
+        <div class="form-row"><label>Group / Area</label>
+          <input type="text" id="p-group" value="${esc(p.group||'')}" placeholder="e.g. Marina, T-Nagar" list="group-list">
+          <datalist id="group-list">${groups.map(g=>`<option value="${esc(g)}">`).join('')}</datalist>
+        </div>
+        <div class="form-row"><label>Color</label>
+          <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px">
+            ${COLORS.map((c,i)=>`<div onclick="selectColorIdx(this,'p-color',${i})" class="prop-color-swatch" style="width:26px;height:26px;border-radius:50%;background:${c};cursor:pointer;outline:${p.colorIdx===i?'3px solid var(--accent)':'none'};outline-offset:3px;transition:outline .15s"></div>`).join('')}
+          </div>
+          <input type="hidden" id="p-color" value="${p.colorIdx}">
+        </div>
+        <div class="form-row" style="display:flex;align-items:center;gap:8px">
+          <input type="checkbox" id="p-mortgaged" style="width:auto;accent-color:var(--accent)" ${p.mortgaged?'checked':''}>
+          <label for="p-mortgaged" style="margin:0;text-transform:none;font-size:14px;letter-spacing:0">Mortgaged</label>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:14px">
+          <button class="btn primary" style="flex:1" onclick="${m.type==='addProp'?'saveAddProp()':'saveEditProp(\''+m.propId+'\')'}">Save</button>
+          <button class="btn" onclick="closeModal()">Cancel</button>
+        </div>
+      </div></div>`;
+  }
+
+  if (m.type==='transact') {
+    const team = state.teams.find(t=>t.id===m.teamId);
+    const isCredit = m.subtype==='credit';
+    return `<div class="modal-overlay" onclick="closeModalBg(event)">
+      <div class="modal center">
+        <button class="modal-close" onclick="closeModal()">✕</button>
+        <div class="modal-title">${isCredit?'💚 Add Credits':'🔴 Deduct Credits'}</div>
+        <div style="margin-bottom:12px;padding:10px;background:var(--surface2);border-radius:var(--radius-xs);border:1px solid var(--border)">
+          <div style="font-size:12px;color:var(--text3)">Team</div>
+          <div style="font-weight:700;color:${team?.color}">${esc(team?.name)}</div>
+          <div style="font-size:22px;font-family:var(--font-head);font-weight:800;margin-top:2px">₹${num(team?.balance)}</div>
+        </div>
+        <div class="form-row"><label>Amount (₹)</label><input type="number" id="t-amount" placeholder="0" autofocus></div>
+        <div class="form-row"><label>Note (optional)</label><input type="text" id="t-note" placeholder="e.g. Salary, Bank bonus..."></div>
+        <div style="display:flex;gap:8px;margin-top:14px">
+          <button class="btn ${isCredit?'success':'danger'}" style="flex:1" onclick="saveTransact('${m.teamId}','${m.subtype}')">Confirm</button>
+          <button class="btn" onclick="closeModal()">Cancel</button>
+        </div>
+      </div></div>`;
+  }
+
+  if (m.type==='assign') {
+    const team = state.teams.find(t=>t.id===m.teamId);
+    const allProps = state.properties.filter(p=>!p.ownedBy||p.ownedBy===m.teamId);
+    return `<div class="modal-overlay" onclick="closeModalBg(event)">
+      <div class="modal center">
+        <button class="modal-close" onclick="closeModal()">✕</button>
+        <div class="modal-title">📦 Assign Property</div>
+        <div style="font-size:13px;color:var(--text2);margin-bottom:12px">Team: <strong style="color:${team?.color}">${esc(team?.name)}</strong></div>
+        ${!allProps.length?`<div class="empty">No available properties.</div>`:`
+          <div style="max-height:340px;overflow-y:auto">
+          ${allProps.map(p=>`
+            <div class="prop-row" onclick="toggleAssign('${p.id}','${m.teamId}')" style="cursor:pointer">
+              <div class="prop-left">
+                <div class="color-bar" style="background:${COLORS[p.colorIdx??0]};height:28px"></div>
+                <div>
+                  <div class="prop-name">${esc(p.name)}</div>
+                  <div class="prop-meta">₹${num(p.price)} · Rent ₹${num(p.rent)}</div>
+                </div>
+              </div>
+              ${p.ownedBy===m.teamId?`<span class="badge owned">✓ Owned</span>`:`<span class="badge free">Assign</span>`}
+            </div>
+          `).join('')}
+          </div>
+        `}
+        <button class="btn" style="width:100%;margin-top:12px" onclick="closeModal()">Done</button>
+      </div></div>`;
+  }
+
+  if (m.type==='rent') {
+    const team = state.teams.find(t=>t.id===m.teamId);
+    const ownedByOthers = state.properties.filter(p=>p.ownedBy&&p.ownedBy!==m.teamId);
+    return `<div class="modal-overlay" onclick="closeModalBg(event)">
+      <div class="modal center">
+        <button class="modal-close" onclick="closeModal()">✕</button>
+        <div class="modal-title">💸 Pay Rent</div>
+        <div style="font-size:13px;color:var(--text2);margin-bottom:12px">Paying from: <strong style="color:${team?.color}">${esc(team?.name)}</strong> (₹${num(team?.balance)})</div>
+        ${!ownedByOthers.length?`<div style="color:var(--text3);font-size:14px;padding:12px 0">No properties owned by other teams.</div>`:`
+          <div style="max-height:340px;overflow-y:auto">
+          ${ownedByOthers.map(p=>{
+            const owner=state.teams.find(t=>t.id===p.ownedBy);
+            return `<div class="prop-row" onclick="payRent('${m.teamId}','${p.id}')" style="cursor:pointer">
+              <div class="prop-left">
+                <div class="color-bar" style="background:${COLORS[p.colorIdx??0]};height:28px"></div>
+                <div>
+                  <div class="prop-name">${esc(p.name)}</div>
+                  <div class="prop-meta">Owner: <span style="color:${owner?.color}">${esc(owner?.name)}</span> · Rent: ₹${num(p.rent)}</div>
+                </div>
+              </div>
+              <button class="btn sm primary">Pay ₹${num(p.rent)}</button>
+            </div>`;
+          }).join('')}
+          </div>
+        `}
+        <button class="btn" style="width:100%;margin-top:12px" onclick="closeModal()">Done</button>
+      </div></div>`;
+  }
+
+  return '';
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// ACTIONS
+// ═══════════════════════════════════════════════════════════════════════
+function uid() { return Math.random().toString(36).slice(2,9); }
+
+function stateChanged() {
+  render();
+  saveToServer({...state, modal:null});
+}
+
+window.setTab = t => { state.activeTab = t; render(); };
+window.closeModal = () => { state.modal = null; render(); };
+window.closeModalBg = e => { if (e.target === e.currentTarget) { state.modal = null; render(); } };
+window.searchProps = v => { state.propSearch = v; render(); };
+
+window.selectColor = (el, inputId, c) => {
+  document.getElementById(inputId).value = c;
+  document.querySelectorAll('.color-swatch').forEach(x => x.style.outline = 'none');
+  el.style.outline = '3px solid var(--accent)';
+  el.style.outlineOffset = '3px';
+};
+window.selectColorIdx = (el, inputId, i) => {
+  document.getElementById(inputId).value = i;
+  document.querySelectorAll('.prop-color-swatch').forEach(x => x.style.outline = 'none');
+  el.style.outline = '3px solid var(--accent)';
+  el.style.outlineOffset = '3px';
+};
+
+window.saveAddTeam = () => {
+  const name = document.getElementById('m-name')?.value?.trim();
+  const balance = parseInt(document.getElementById('m-balance')?.value)||0;
+  const color = document.getElementById('m-color')?.value || COLORS[0];
+  if (!name) { toast('Enter a team name','error'); return; }
+  state.teams.push({id:uid(),name,balance,color});
+  state.modal = null;
+  stateChanged();
+};
+window.editTeam = id => {
+  const t = state.teams.find(x=>x.id===id);
+  state.modal = {type:'editTeam',teamId:id,team:{...t}};
+  render();
+};
+window.saveEditTeam = id => {
+  const t = state.teams.find(x=>x.id===id);
+  if (!t) return;
+  t.name = document.getElementById('m-name')?.value?.trim()||t.name;
+  t.balance = parseInt(document.getElementById('m-balance')?.value)||0;
+  t.color = document.getElementById('m-color')?.value||t.color;
+  state.modal = null;
+  stateChanged();
+};
+window.deleteTeam = id => {
+  if (!confirm('Remove this team?')) return;
+  state.teams = state.teams.filter(t=>t.id!==id);
+  state.properties.forEach(p=>{if(p.ownedBy===id)p.ownedBy=null;});
+  stateChanged();
+};
+
+window.saveAddProp = () => {
+  const name = document.getElementById('p-name')?.value?.trim();
+  if (!name) { toast('Enter a property name','error'); return; }
+  state.properties.push({
+    id:uid(),name,
+    price:parseInt(document.getElementById('p-price')?.value)||0,
+    rent:parseInt(document.getElementById('p-rent')?.value)||0,
+    group:document.getElementById('p-group')?.value?.trim()||'',
+    colorIdx:parseInt(document.getElementById('p-color')?.value)||0,
+    mortgaged:document.getElementById('p-mortgaged')?.checked||false,
+    ownedBy:null
+  });
+  state.modal = null;
+  stateChanged();
+};
+window.editProp = id => {
+  const p = state.properties.find(x=>x.id===id);
+  state.modal = {type:'editProp',propId:id,prop:{...p}};
+  render();
+};
+window.saveEditProp = id => {
+  const p = state.properties.find(x=>x.id===id);
+  if (!p) return;
+  p.name = document.getElementById('p-name')?.value?.trim()||p.name;
+  p.price = parseInt(document.getElementById('p-price')?.value)||0;
+  p.rent = parseInt(document.getElementById('p-rent')?.value)||0;
+  p.group = document.getElementById('p-group')?.value?.trim()||'';
+  p.colorIdx = parseInt(document.getElementById('p-color')?.value)||0;
+  p.mortgaged = document.getElementById('p-mortgaged')?.checked||false;
+  state.modal = null;
+  stateChanged();
+};
+window.deleteProp = id => {
+  if (!confirm('Remove this property?')) return;
+  state.properties = state.properties.filter(p=>p.id!==id);
+  stateChanged();
+};
+
+window.openTransact = (teamId, subtype) => { state.modal = {type:'transact',teamId,subtype}; render(); };
+window.saveTransact = (teamId, subtype) => {
+  const amount = parseInt(document.getElementById('t-amount')?.value)||0;
+  const note = document.getElementById('t-note')?.value?.trim();
+  if (!amount) { toast('Enter an amount','error'); return; }
+  const team = state.teams.find(t=>t.id===teamId);
+  if (!team) return;
+  const delta = subtype==='credit' ? amount : -amount;
+  team.balance += delta;
+  state.transactions.push({id:uid(),teamId,amount:delta,note,type:subtype,time:Date.now()});
+  state.modal = null;
+  stateChanged();
+};
+
+window.openAssign = teamId => { state.modal = {type:'assign',teamId}; render(); };
+window.toggleAssign = (propId, teamId) => {
+  const p = state.properties.find(x=>x.id===propId);
+  if (!p) return;
+  p.ownedBy = p.ownedBy===teamId ? null : teamId;
+  state.modal = {type:'assign',teamId};
+  stateChanged();
+};
+
+window.openRent = teamId => { state.modal = {type:'rent',teamId}; render(); };
+window.payRent = (fromId, propId) => {
+  const prop = state.properties.find(p=>p.id===propId);
+  if (!prop||!prop.ownedBy) return;
+  const payer = state.teams.find(t=>t.id===fromId);
+  const owner = state.teams.find(t=>t.id===prop.ownedBy);
+  if (!payer||!owner) return;
+  payer.balance -= prop.rent;
+  owner.balance += prop.rent;
+  state.transactions.push({id:uid(),teamId:fromId,amount:-prop.rent,note:`Rent: ${prop.name}`,type:'rent',time:Date.now()});
+  state.transactions.push({id:uid(),teamId:prop.ownedBy,amount:prop.rent,note:`Rent from ${payer.name}: ${prop.name}`,type:'rent',time:Date.now()});
+  toast(`₹${num(prop.rent)} paid to ${owner.name}!`,'success');
+  state.modal = {type:'rent',teamId:fromId};
+  stateChanged();
+};
+
+window.saveBoardSettings = () => {
+  state.board.name = document.getElementById('board-name')?.value?.trim() || state.board.name;
+  state.board.startMoney = parseInt(document.getElementById('start-money')?.value)||1500;
+  document.getElementById('header-board-name').textContent = state.board.name;
+  stateChanged();
+  toast('Settings saved','success');
+};
+
+window.exportData = () => {
+  const d = JSON.stringify(state,null,2);
+  const a = document.createElement('a');
+  a.href = 'data:text/json;charset=utf-8,' + encodeURIComponent(d);
+  a.download = 'monopoly-backup.json';
+  a.click();
+};
+window.resetAll = () => {
+  if (!confirm('Reset ALL game data? This cannot be undone!')) return;
+  state.teams=[]; state.properties=[]; state.transactions=[];
+  stateChanged();
+  toast('All data reset','success');
+};
+
+function onFab() {
+  if (state.activeTab==='teams') { state.modal={type:'addTeam'}; render(); }
+  else if (state.activeTab==='properties') { state.modal={type:'addProp'}; render(); }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// UTILITIES
+// ═══════════════════════════════════════════════════════════════════════
+function esc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function num(n){ return (n||0).toLocaleString('en-IN'); }
+function formatTime(ts){
+  const d = new Date(ts);
+  const now = new Date();
+  const diff = Date.now()-ts;
+  if(diff<60000) return 'Just now';
+  if(diff<3600000) return Math.floor(diff/60000)+'m ago';
+  if(diff<86400000) return Math.floor(diff/3600000)+'h ago';
+  return d.toLocaleDateString('en-IN',{day:'numeric',month:'short'});
+}
+function getColorGroups(){
+  const groups={};
+  state.properties.forEach(p=>{
+    const ci=p.colorIdx??0;
+    if(!groups[ci]) groups[ci]={color:COLORS[ci],name:COLOR_NAMES[ci],count:0};
+    groups[ci].count++;
+  });
+  return Object.values(groups);
+}
+
+function toast(msg, type='') {
+  const el = document.createElement('div');
+  el.className = 'toast' + (type?' '+type:'');
+  el.textContent = msg;
+  document.getElementById('toast-container').appendChild(el);
+  setTimeout(()=>el.remove(), 2800);
+}
+</script>
+</body>
+</html>
