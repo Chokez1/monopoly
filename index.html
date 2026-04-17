@@ -415,7 +415,6 @@ select option{background:var(--s2)}
 </head>
 <body>
 
-<!-- ═══ LOGIN ═══ -->
 <div id="login-screen">
   <div class="login-wrap">
     <div class="login-brand">
@@ -436,7 +435,6 @@ select option{background:var(--s2)}
   </div>
 </div>
 
-<!-- ═══ APP ═══ -->
 <div id="app">
   <div class="hdr">
     <div class="hdr-left">
@@ -453,7 +451,6 @@ select option{background:var(--s2)}
   </div>
 
   <div class="layout">
-    <!-- Sidebar (desktop) -->
     <div class="sidebar" id="sidebar">
       <div style="padding:8px 4px 6px;font-size:10px;color:var(--tx3);font-weight:700;text-transform:uppercase;letter-spacing:.8px;font-family:var(--ffd)">Navigation</div>
       <button class="snav-item active" id="sn-home" onclick="setTab('home')"><span class="snav-icon">🏠</span>Home</button>
@@ -466,13 +463,11 @@ select option{background:var(--s2)}
       <button class="snav-item" id="sn-settings" onclick="setTab('settings')"><span class="snav-icon">⚙️</span>Settings</button>
     </div>
 
-    <!-- Main content -->
     <div class="main" id="main-scroll">
       <div class="content" id="content"></div>
     </div>
   </div>
 
-  <!-- Bottom nav (mobile) -->
   <nav class="bnav">
     <button class="bni active" id="bn-home" onclick="setTab('home')"><span class="bni-icon">🏠</span>Home</button>
     <button class="bni" id="bn-teams" onclick="setTab('teams')"><span class="bni-icon">👥</span>Players</button>
@@ -483,11 +478,8 @@ select option{background:var(--s2)}
   </nav>
 </div>
 
-<!-- FAB -->
 <button class="fab" id="fab" onclick="onFab()" style="display:none">＋</button>
-<!-- Toasts -->
 <div id="toast-cnt"></div>
-<!-- Modal -->
 <div id="modal-root"></div>
 
 <script>
@@ -673,11 +665,11 @@ function homeHTML(){
     <div class="card" style="cursor:pointer" onclick="setTab('leaderboard')">
       <div class="ct">🏆 Leaderboard Preview</div>
       ${state.teams.length?[...state.teams].sort((a,b)=>{
-        const av=state.properties.filter(p=>p.ownedBy===a.id).reduce((s,p)=>s+(p.price||0),0);
-        const bv=state.properties.filter(p=>p.ownedBy===b.id).reduce((s,p)=>s+(p.price||0),0);
+        const av=state.properties.filter(p=>p.ownedBy===a.id).reduce((s,p)=>s+(p.mortgaged?Math.floor((p.price||0)/2):(p.price||0)),0);
+        const bv=state.properties.filter(p=>p.ownedBy===b.id).reduce((s,p)=>s+(p.mortgaged?Math.floor((p.price||0)/2):(p.price||0)),0);
         return(b.balance+bv)-(a.balance+av);
       }).map((t,i)=>{
-        const tv=state.properties.filter(p=>p.ownedBy===t.id).reduce((s,p)=>s+(p.price||0),0);
+        const tv=state.properties.filter(p=>p.ownedBy===t.id).reduce((s,p)=>s+(p.mortgaged?Math.floor((p.price||0)/2):(p.price||0)),0);
         return`<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--bd)${i===state.teams.length-1?';border:none':''}">
           <span style="font-family:var(--ffd);font-weight:900;color:${i===0?'var(--am)':i===1?'#94a3b8':i===2?'#b45309':'var(--tx3)'};font-size:14px;width:20px">#${i+1}</span>
           <div style="width:7px;height:7px;border-radius:50%;background:${t.color};flex-shrink:0"></div>
@@ -699,7 +691,7 @@ function teamsHTML(){
     <div class="page-title">Players</div>
     ${state.teams.map(t=>{
       const props=state.properties.filter(p=>p.ownedBy===t.id);
-      const propVal=props.reduce((s,p)=>s+(p.price||0),0);
+      const propVal=props.reduce((s,p)=>s+(p.mortgaged?Math.floor((p.price||0)/2):(p.price||0)),0);
       const netWorth=t.balance+propVal;
       return`<div class="pcard" style="--tc:${t.color}">
         <div style="display:flex;align-items:flex-start;justify-content:space-between">
@@ -771,17 +763,17 @@ function propsHTML(){
 // ══════════════════════════════════════════════════════════
 function leaderboardHTML(){
   const sorted=[...state.teams].sort((a,b)=>{
-    const av=state.properties.filter(p=>p.ownedBy===a.id).reduce((s,p)=>s+(p.price||0),0);
-    const bv=state.properties.filter(p=>p.ownedBy===b.id).reduce((s,p)=>s+(p.price||0),0);
+    const av=state.properties.filter(p=>p.ownedBy===a.id).reduce((s,p)=>s+(p.mortgaged?Math.floor((p.price||0)/2):(p.price||0)),0);
+    const bv=state.properties.filter(p=>p.ownedBy===b.id).reduce((s,p)=>s+(p.mortgaged?Math.floor((p.price||0)/2):(p.price||0)),0);
     return(b.balance+bv)-(a.balance+av);
   });
   if(!sorted.length)return`<div class="empty"><span class="empty-icon">🏆</span>No players yet.</div>`;
-  const max=sorted.length?((sorted[0].balance)+(state.properties.filter(p=>p.ownedBy===sorted[0].id).reduce((s,p)=>s+(p.price||0),0))||1):1;
+  const max=sorted.length?((sorted[0].balance)+(state.properties.filter(p=>p.ownedBy===sorted[0].id).reduce((s,p)=>s+(p.mortgaged?Math.floor((p.price||0)/2):(p.price||0)),0))||1):1;
   return`<div>
     <div class="page-title">Leaderboard</div>
     <div class="lbcard">
     ${sorted.map((t,i)=>{
-      const tv=state.properties.filter(p=>p.ownedBy===t.id).reduce((s,p)=>s+(p.price||0),0);
+      const tv=state.properties.filter(p=>p.ownedBy===t.id).reduce((s,p)=>s+(p.mortgaged?Math.floor((p.price||0)/2):(p.price||0)),0);
       const nw=t.balance+tv;
       const pct=Math.round((nw/max)*100);
       const rk=i===0?'g1':i===1?'g2':i===2?'g3':'';
@@ -813,7 +805,7 @@ function bankHTML(){
   // Per-player ownership
   const playerOwnership=state.teams.map(t=>{
     const ownedProps=state.properties.filter(p=>p.ownedBy===t.id);
-    const propVal=ownedProps.reduce((s,p)=>s+(p.price||0),0);
+    const propVal=ownedProps.reduce((s,p)=>s+(p.mortgaged?Math.floor((p.price||0)/2):(p.price||0)),0);
     return{...t,propCount:ownedProps.length,propVal,netWorth:t.balance+propVal};
   }).sort((a,b)=>b.netWorth-a.netWorth);
   const maxNw=playerOwnership.length?(playerOwnership[0].netWorth||1):1;
@@ -821,7 +813,6 @@ function bankHTML(){
   return`<div>
     <div class="page-title">Bank & Ownership</div>
 
-    <!-- Bank hero -->
     <div class="bank-hero">
       <div style="display:flex;justify-content:space-between;align-items:flex-start">
         <div>
@@ -836,7 +827,6 @@ function bankHTML(){
       </div>
     </div>
 
-    <!-- Economy breakdown -->
     <div class="card">
       <div class="ct">💰 Economy Breakdown</div>
       <div class="sgrid" style="grid-template-columns:1fr 1fr 1fr">
@@ -856,7 +846,6 @@ function bankHTML(){
       </div>
     </div>
 
-    <!-- Property stats -->
     <div class="card">
       <div class="ct">🏘️ Property Status</div>
       <div class="sgrid">
@@ -867,7 +856,6 @@ function bankHTML(){
       </div>
     </div>
 
-    <!-- Player ownership breakdown -->
     ${playerOwnership.length?`<div class="card">
       <div class="ct">👥 Player Ownership</div>
       <div style="background:var(--s1);border-radius:var(--rs);overflow:hidden;border:1px solid var(--bd)">
