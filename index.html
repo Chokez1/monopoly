@@ -39,8 +39,19 @@
   --safe-b:env(safe-area-inset-bottom,0px);
 }
 
-html{height:100%;overflow:hidden}
-body{font-family:var(--ff);background:var(--bg);color:var(--tx);height:100%;overflow:hidden;font-size:15px;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
+html{height:100%;overflow-x:hidden}
+
+body{
+  font-family:var(--ff);
+  background:var(--bg);
+  color:var(--tx);
+  min-height:100%;
+  overflow-x:hidden;
+  overflow-y:auto;
+  font-size:15px;
+  -webkit-font-smoothing:antialiased;
+  -moz-osx-font-smoothing:grayscale;
+}
 
 /* ═══ SCROLLBAR ═════════════════════════════════════════════════════════════ */
 ::-webkit-scrollbar{width:3px;height:3px}
@@ -149,7 +160,11 @@ body{font-family:var(--ff);background:var(--bg);color:var(--tx);height:100%;over
 .snav-sep{height:1px;background:var(--bd);margin:8px 6px}
 
 /* main scroll area */
-.main{flex:1;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch}
+.main{
+  flex:1;
+  overflow:visible;
+  min-height:100%;
+}
 .content{padding:14px;max-width:800px;margin:0 auto;padding-bottom:calc(var(--nh) + 20px + var(--safe-b))}
 
 /* ═══ BOTTOM NAV (mobile) ═════════════════════════════════════════════════ */
@@ -483,6 +498,17 @@ select option{background:var(--s2)}
 <div id="modal-root"></div>
 
 <script>
+function updatePropSearch(v){
+  state.propSearch = v;
+  render();
+  requestAnimationFrame(()=>{
+    const el = document.getElementById('prop-search');
+    if(el){
+      el.focus();
+      el.setSelectionRange(v.length, v.length);
+    }
+  });
+}
 // ══════════════════════════════════════════════════════════
 // CONSTANTS
 // ══════════════════════════════════════════════════════════
@@ -729,7 +755,7 @@ function propsHTML(){
   const groups=[...new Set(props.map(p=>p.group||''))];
   return`<div>
     <div class="page-title">Properties</div>
-    <div class="swrap"><span class="sicon">🔍</span><input type="text" placeholder="Search…" value="${esc(state.propSearch||'')}" oninput="state.propSearch=this.value;render()"></div>
+    <div class="swrap"><span class="sicon">🔍</span><input type="text" id="prop-search" placeholder="Search…" value="${esc(state.propSearch||'')}" oninput="updatePropSearch(this.value)"></div>
     ${!props.length?`<div class="empty"><span class="empty-icon">🏘️</span>No properties found.</div>`:''}
     ${groups.map(g=>{
       const gprops=props.filter(p=>(p.group||'')=== g);
