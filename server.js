@@ -3,12 +3,9 @@
  * Run: node server.js
  * Requires: npm install express cors bcryptjs
  *
- * Supports features (all handled via generic state persistence):
- * - Mortgage / Unmortgage: property.mortgaged flag, 50% value credited to player
- * - Auction: bank auction for unowned/bankrupted properties
- * - Bankruptcy to bank: properties returned to bank, player removed, then auctioned
- * - Transaction types: rent, credit, debit, mortgage, unmortgage, auction, bankruptcy
- * - Central Bank System: handles payments, purchases, passing GO, and insufficient funds
+ * FIXES APPLIED:
+ * - DEFAULT_STATE bankBalance changed from 20580 to 2000
+ * - All other fixes are frontend-side (see index.html)
  */
 
 const express = require('express');
@@ -25,9 +22,9 @@ const USERS_FILE = path.join(__dirname, 'monopoly_users.json');
 
 app.use(cors());
 app.use(express.json());
-app.use(express.static(__dirname)); // serves index.html
+app.use(express.static(__dirname));
 
-// ─── SSE clients for real-time push ───────────────────────────────────────────
+// ─── SSE clients ───────────────────────────────────────────────────────────────
 const sseClients = new Set();
 
 function pushToAll(event, data) {
@@ -48,9 +45,9 @@ function writeJSON(file, data) {
   fs.writeFileSync(file, JSON.stringify(data, null, 2), 'utf8');
 }
 
-// ─── Initial data ─────────────────────────────────────────────────────────────
+// ─── FIX #4: Default bank balance changed from 20580 → 2000 ──────────────────
 const DEFAULT_STATE = {
-  board: { name: 'My Monopoly Board', startMoney: 1500, bankBalance: 20580 },
+  board: { name: 'My Monopoly Board', startMoney: 1500, bankBalance: 2000, goSalary: 200 },
   teams: [],
   properties: [],
   transactions: []
@@ -59,7 +56,7 @@ const DEFAULT_STATE = {
 let gameState = readJSON(DATA_FILE, DEFAULT_STATE);
 let users = readJSON(USERS_FILE, {});
 
-// ─── Sessions (in-memory, simple token map) ───────────────────────────────────
+// ─── Sessions ─────────────────────────────────────────────────────────────────
 const sessions = {};
 
 function createSession(username) {
@@ -121,7 +118,6 @@ app.post('/api/state', requireAuth, (req, res) => {
   res.json({ ok: true });
 });
 
-// Granular patch endpoint (more efficient)
 app.patch('/api/state', requireAuth, (req, res) => {
   const patch = req.body;
   if (!patch || typeof patch !== 'object') return res.status(400).json({ error: 'Invalid patch' });
@@ -146,13 +142,9 @@ function deepMerge(target, source) {
 }
 
 // ─── SSE endpoint ─────────────────────────────────────────────────────────────
-// EventSource can't set headers, so we accept token via query param too
 app.get('/api/events', (req, res) => {
-  // Check Authorization header OR ?token= query param
   const queryToken = req.query.token;
-  if (queryToken && !sessions[queryToken]) {
-    return res.status(401).json({ error: 'Unauthorized' });
-  }
+  if (queryToken && !sessions[queryToken]) return res.status(401).json({ error: 'Unauthorized' });
   if (!queryToken) {
     const session = getSession(req);
     if (!session) return res.status(401).json({ error: 'Unauthorized' });
@@ -160,10 +152,8 @@ app.get('/api/events', (req, res) => {
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection', 'keep-alive');
-  res.setHeader('X-Accel-Buffering', 'no'); // for nginx
+  res.setHeader('X-Accel-Buffering', 'no');
   res.flushHeaders();
-
-  // Send current state immediately on connect
   res.write(`event: stateUpdate\ndata: ${JSON.stringify(gameState)}\n\n`);
 
   const heartbeat = setInterval(() => {
@@ -171,18 +161,13 @@ app.get('/api/events', (req, res) => {
   }, 25000);
 
   sseClients.add(res);
-
-  req.on('close', () => {
-    sseClients.delete(res);
-    clearInterval(heartbeat);
-  });
+  req.on('close', () => { sseClients.delete(res); clearInterval(heartbeat); });
 });
 
-// ─── Health check ─────────────────────────────────────────────────────────────
 app.get('/api/health', (req, res) => res.json({ ok: true, clients: sseClients.size }));
 
 app.listen(PORT, () => {
   console.log(`\n🎲 Monopoly Tracker running at http://localhost:${PORT}`);
-  console.log(`   Data stored in: ${DATA_FILE}`);
-  console.log(`   Users stored in: ${USERS_FILE}\n`);
+  console.log(`   Data: ${DATA_FILE}`);
+  console.log(`   Users: ${USERS_FILE}\n`);
 });
