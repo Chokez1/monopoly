@@ -646,7 +646,7 @@ function render(){
 // ══════════════════════════════════════════════════════════
 function homeHTML(){
   const totalCash=state.teams.reduce((s,t)=>s+t.balance,0);
-  const totalPropVal=state.properties.reduce((s,p)=>s+(p.price||0),0);
+  const totalPropVal=state.properties.reduce((s,p)=>s+getPropValue(p),0);
   const bankProps=state.properties.filter(p=>!p.ownedBy&&!p.mortgaged);
   const totalMoney=totalCash+state.board.bankBalance+totalPropVal;
   return`<div>
@@ -654,7 +654,7 @@ function homeHTML(){
     <div class="economy-card">
       <div class="eco-title">Total Economy</div>
       <div class="eco-val">₹${num(totalMoney)}</div>
-      <div class="eco-sub">Cash in circulation + Bank + All property values</div>
+      <div class="eco-sub">Cash in circulation + Bank + All property & house values</div>
     </div>
     <div class="sgrid">
       <div class="sbox">
@@ -679,7 +679,7 @@ function homeHTML(){
       ${bankProps.slice(0,5).map(p=>`<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--bd)">
         <div style="display:flex;align-items:center;gap:8px">
           <div style="width:8px;height:22px;border-radius:2px;background:${COLORS[p.colorIdx??0]}"></div>
-          <div><div style="font-size:13px;font-weight:600">${esc(p.name)}</div><div style="font-size:11px;color:var(--tx3)">₹${num(p.price)} · ${p.rentType==='dice'?`🎲 ×${p.diceMultiplier||4} dice`:`Rent ₹${num(p.rent)}`}</div></div>
+          <div><div style="font-size:13px;font-weight:600">${esc(p.name)}</div><div style="font-size:11px;color:var(--tx3)">₹${num(p.price)} · ${p.rentType==='dice'?`🎲 ×${p.diceMultiplier||4} dice`:`Rent ₹${num(getActiveRent(p))}`}</div></div>
         </div>
         <div style="display:flex;gap:5px">
           <button class="btn sm suc" onclick="setTab('properties');setTimeout(()=>openBuyProp('${p.id}'),50)">Buy</button>
@@ -691,11 +691,11 @@ function homeHTML(){
     <div class="card" style="cursor:pointer" onclick="setTab('leaderboard')">
       <div class="ct">🏆 Leaderboard Preview</div>
       ${state.teams.length?[...state.teams].sort((a,b)=>{
-        const av=state.properties.filter(p=>p.ownedBy===a.id).reduce((s,p)=>s+(p.mortgaged?Math.floor((p.price||0)/2):(p.price||0)),0);
-        const bv=state.properties.filter(p=>p.ownedBy===b.id).reduce((s,p)=>s+(p.mortgaged?Math.floor((p.price||0)/2):(p.price||0)),0);
+        const av=state.properties.filter(p=>p.ownedBy===a.id).reduce((s,p)=>s+getPropValue(p),0);
+        const bv=state.properties.filter(p=>p.ownedBy===b.id).reduce((s,p)=>s+getPropValue(p),0);
         return(b.balance+bv)-(a.balance+av);
       }).map((t,i)=>{
-        const tv=state.properties.filter(p=>p.ownedBy===t.id).reduce((s,p)=>s+(p.mortgaged?Math.floor((p.price||0)/2):(p.price||0)),0);
+        const tv=state.properties.filter(p=>p.ownedBy===t.id).reduce((s,p)=>s+getPropValue(p),0);
         return`<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--bd)${i===state.teams.length-1?';border:none':''}">
           <span style="font-family:var(--ffd);font-weight:900;color:${i===0?'var(--am)':i===1?'#94a3b8':i===2?'#b45309':'var(--tx3)'};font-size:14px;width:20px">#${i+1}</span>
           <div style="width:7px;height:7px;border-radius:50%;background:${t.color};flex-shrink:0"></div>
@@ -717,7 +717,7 @@ function teamsHTML(){
     <div class="page-title">Players</div>
     ${state.teams.map(t=>{
       const props=state.properties.filter(p=>p.ownedBy===t.id);
-      const propVal=props.reduce((s,p)=>s+(p.mortgaged?Math.floor((p.price||0)/2):(p.price||0)),0);
+      const propVal=props.reduce((s,p)=>s+getPropValue(p),0);
       const netWorth=t.balance+propVal;
       return`<div class="pcard" style="--tc:${t.color}">
         <div style="display:flex;align-items:flex-start;justify-content:space-between">
@@ -731,7 +731,7 @@ function teamsHTML(){
             <button class="btn sm dan" onclick="deleteTeam('${t.id}')">🗑️</button>
           </div>
         </div>
-        ${props.length?`<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:9px">${props.map(p=>`<span class="${p.mortgaged?'pchip mort':'pchip'}"><span class="cdot" style="background:${COLORS[p.colorIdx??0]}"></span>${esc(p.name)}${p.mortgaged?' 🔒':''}</span>`).join('')}</div>`:''}
+        ${props.length?`<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:9px">${props.map(p=>`<span class="${p.mortgaged?'pchip mort':'pchip'}"><span class="cdot" style="background:${COLORS[p.colorIdx??0]}"></span>${esc(p.name)}${p.mortgaged?' 🔒':''}${p.houses?' '+'🏠'.repeat(p.houses):''}</span>`).join('')}</div>`:''}
         <div class="agrid">
           <button class="abtn suc" onclick="openTransact('${t.id}','credit')"><span class="ai">💚</span>Credit</button>
           <button class="abtn dan" onclick="openTransact('${t.id}','debit')"><span class="ai">🔴</span>Debit</button>
@@ -762,18 +762,22 @@ function propsHTML(){
       return`${g?`<div class="gh">${esc(g)}</div>`:''}
       ${gprops.map(p=>{
         const owner=state.teams.find(t=>t.id===p.ownedBy);
+        const houseStr = p.houses ? ' ' + '🏠'.repeat(p.houses) : '';
+        const canBuild = p.ownedBy && !p.mortgaged && p.rentType !== 'dice' && (p.houses||0) < 3 && p.housePrice > 0;
         return`<div class="prow${p.mortgaged?' mort':''}">
           <div class="pleft">
             <div class="cbar" style="background:${COLORS[p.colorIdx??0]};height:34px"></div>
             <div>
               <div class="pname">${esc(p.name)}${p.mortgaged?' 🔒':''}</div>
-              <div class="pmeta">₹${num(p.price)} · ${p.rentType==='dice'?`🎲 ×${p.diceMultiplier||4} dice`:`Rent ₹${num(p.rent)}`}${owner?` · <span style="color:${owner.color}">${esc(owner.name)}</span>`:''}</div>
+              <div class="pmeta">₹${num(p.price)} · ${p.rentType==='dice'?`🎲 ×${p.diceMultiplier||4} dice`:`Rent ₹${num(getActiveRent(p))}`}${houseStr}${owner?` · <span style="color:${owner.color}">${esc(owner.name)}</span>`:''}</div>
             </div>
           </div>
           <div style="display:flex;flex-direction:column;align-items:flex-end;gap:5px">
             <span class="badge ${p.ownedBy?(p.mortgaged?'mortg':'owned'):'bank'}">${p.ownedBy?(p.mortgaged?'Mortgaged':owner?.name||'Owned'):'Bank'}</span>
             <div style="display:flex;gap:4px">
               ${!p.ownedBy?`<button class="btn sm suc" onclick="openBuyProp('${p.id}')">Buy</button><button class="btn sm pur" onclick="openAuctionForProp('${p.id}')">🔨</button>`:''}
+              ${canBuild ? `<button class="btn sm suc" onclick="buildHouse('${p.id}')">Build 🏠 (₹${num(p.housePrice)})</button>` : ''}
+              ${(p.houses||0) > 0 ? `<button class="btn sm amb" onclick="sellHouse('${p.id}')">Sell 🏠 (₹${num(Math.floor((p.housePrice||0)/2))})</button>` : ''}
               <button class="btn sm" onclick="openEditProp('${p.id}')">✏️</button>
               <button class="btn sm dan" onclick="deleteProp('${p.id}')">🗑️</button>
             </div>
@@ -789,49 +793,82 @@ function propsHTML(){
 // ══════════════════════════════════════════════════════════
 function leaderboardHTML(){
   const sorted=[...state.teams].sort((a,b)=>{
-    const av=state.properties.filter(p=>p.ownedBy===a.id).reduce((s,p)=>s+(p.mortgaged?Math.floor((p.price||0)/2):(p.price||0)),0);
-    const bv=state.properties.filter(p=>p.ownedBy===b.id).reduce((s,p)=>s+(p.mortgaged?Math.floor((p.price||0)/2):(p.price||0)),0);
+    const av=state.properties.filter(p=>p.ownedBy===a.id).reduce((s,p)=>s+getPropValue(p),0);
+    const bv=state.properties.filter(p=>p.ownedBy===b.id).reduce((s,p)=>s+getPropValue(p),0);
     return(b.balance+bv)-(a.balance+av);
   });
   if(!sorted.length)return`<div class="empty"><span class="empty-icon">🏆</span>No players yet.</div>`;
-  const max=sorted.length?((sorted[0].balance)+(state.properties.filter(p=>p.ownedBy===sorted[0].id).reduce((s,p)=>s+(p.mortgaged?Math.floor((p.price||0)/2):(p.price||0)),0))||1):1;
-  return`<div>
-    <div class="page-title">Leaderboard</div>
-    <div class="lbcard">
-    ${sorted.map((t,i)=>{
-      const tv=state.properties.filter(p=>p.ownedBy===t.id).reduce((s,p)=>s+(p.mortgaged?Math.floor((p.price||0)/2):(p.price||0)),0);
-      const nw=t.balance+tv;
-      const pct=Math.round((nw/max)*100);
-      const rk=i===0?'g1':i===1?'g2':i===2?'g3':'';
-      return`<div class="lbrow">
-        <div class="lbrank ${rk}">${i===0?'🥇':i===1?'🥈':i===2?'🥉':`#${i+1}`}</div>
-        <div style="width:9px;height:9px;border-radius:50%;background:${t.color};flex-shrink:0"></div>
-        <div style="flex:1;min-width:0">
-          <div style="font-weight:700;font-size:14px">${esc(t.name)}</div>
-          <div style="font-size:11px;color:var(--tx3);margin-top:1px">Cash ₹${num(t.balance)} · Props ₹${num(tv)}</div>
-          <div class="lb-bar-wrap"><div class="lb-bar" style="width:${pct}%;background:${t.color}"></div></div>
+  const max=sorted.length?((sorted[0].balance)+(state.properties.filter(p=>p.ownedBy===sorted[0].id).reduce((s,p)=>s+getPropValue(p),0))||1):1;
+
+  let html = `<div><div class="page-title">Leaderboard</div>`;
+
+  if (sorted.length >= 2) {
+     html += `<div style="display:flex;align-items:flex-end;justify-content:center;gap:10px;margin-bottom:20px;padding:20px 0;">`;
+     if(sorted[1]) html += podiumCard(sorted[1], 2, '#94a3b8', 100);
+     if(sorted[0]) html += podiumCard(sorted[0], 1, 'var(--am)', 120);
+     if(sorted[2]) html += podiumCard(sorted[2], 3, '#b45309', 80);
+     html += `</div>`;
+  }
+
+  html += `<div class="lbcard">`;
+  html += sorted.map((t,i)=>{
+    const propsOwned = state.properties.filter(p=>p.ownedBy===t.id);
+    const tv=propsOwned.reduce((s,p)=>s+getPropValue(p),0);
+    const totalHouses = propsOwned.reduce((s,p)=>s+(p.houses||0),0);
+    const nw=t.balance+tv;
+    const pct=Math.round((nw/max)*100);
+    const rk=i===0?'g1':i===1?'g2':i===2?'g3':'';
+    return`<div class="lbrow">
+      <div class="lbrank ${rk}">${i===0?'🥇':i===1?'🥈':i===2?'🥉':`#${i+1}`}</div>
+      <div style="width:12px;height:12px;border-radius:50%;background:${t.color};flex-shrink:0;box-shadow:0 0 8px ${t.color}80"></div>
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:800;font-size:15px;color:var(--tx)">${esc(t.name)}</div>
+        <div style="font-size:11px;color:var(--tx3);margin-top:2px;display:flex;gap:8px">
+          <span>💰 ₹${num(t.balance)}</span>
+          <span>🏘️ ${propsOwned.length} Props (₹${num(tv)})</span>
+          ${totalHouses>0 ? `<span style="color:var(--tx2)">🏠 ${totalHouses} Houses</span>` : ''}
         </div>
-        <div style="font-family:var(--ffd);font-size:17px;font-weight:900;color:${t.color};flex-shrink:0">₹${num(nw)}</div>
-      </div>`;
-    }).join('')}
-    </div>
-  </div>`;
+        <div class="lb-bar-wrap" style="height:4px;background:var(--s2);margin-top:8px"><div class="lb-bar" style="width:${pct}%;background:linear-gradient(90deg, ${t.color}40, ${t.color})"></div></div>
+      </div>
+      <div style="font-family:var(--ffd);font-size:18px;font-weight:900;color:${t.color};flex-shrink:0;text-align:right">
+        <div>₹${num(nw)}</div>
+        <div style="font-size:9px;color:var(--tx3);text-transform:uppercase;letter-spacing:0.5px">Net Worth</div>
+      </div>
+    </div>`;
+  }).join('');
+  html += `</div></div>`;
+  return html;
+}
+
+function podiumCard(t, rank, color, height) {
+   const propsOwned = state.properties.filter(p=>p.ownedBy===t.id);
+   const nw = t.balance + propsOwned.reduce((s,p)=>s+getPropValue(p),0);
+   return `<div style="display:flex;flex-direction:column;align-items:center;width:30%">
+      <div style="position:relative;margin-bottom:8px">
+        <div style="width:40px;height:40px;border-radius:50%;background:var(--s2);border:2px solid ${color};display:flex;align-items:center;justify-content:center;font-size:20px;z-index:2;position:relative">${rank===1?'👑':rank===2?'🥈':'🥉'}</div>
+        <div style="position:absolute;bottom:-4px;right:-4px;width:16px;height:16px;border-radius:50%;background:${t.color};border:2px solid var(--bg);z-index:3"></div>
+      </div>
+      <div style="font-size:13px;font-weight:700;color:var(--tx);text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;width:100%">${esc(t.name)}</div>
+      <div style="font-family:var(--ffd);font-size:12px;font-weight:800;color:${color}">₹${num(nw)}</div>
+      <div style="width:100%;height:${height}px;background:linear-gradient(to top, ${color}20, transparent);border:1px solid ${color}40;border-bottom:none;border-radius:8px 8px 0 0;margin-top:8px;position:relative">
+        <div style="position:absolute;top:0;left:0;right:0;height:2px;background:${color}"></div>
+      </div>
+   </div>`;
 }
 
 // ══════════════════════════════════════════════════════════
-// BANK & OWNERSHIP TAB (NEW)
+// BANK & OWNERSHIP TAB
 // ══════════════════════════════════════════════════════════
 function bankHTML(){
   const totalCash=state.teams.reduce((s,t)=>s+t.balance,0);
-  const totalPropVal=state.properties.reduce((s,p)=>s+(p.price||0),0);
+  const totalPropVal=state.properties.reduce((s,p)=>s+getPropValue(p),0);
   const totalEconomy=totalCash+state.board.bankBalance+totalPropVal;
   const totalOwned=state.properties.filter(p=>p.ownedBy).length;
   const totalMortgaged=state.properties.filter(p=>p.mortgaged).length;
 
-  // Per-player ownership
   const playerOwnership=state.teams.map(t=>{
     const ownedProps=state.properties.filter(p=>p.ownedBy===t.id);
-    const propVal=ownedProps.reduce((s,p)=>s+(p.mortgaged?Math.floor((p.price||0)/2):(p.price||0)),0);
+    const propVal=ownedProps.reduce((s,p)=>s+getPropValue(p),0);
     return{...t,propCount:ownedProps.length,propVal,netWorth:t.balance+propVal};
   }).sort((a,b)=>b.netWorth-a.netWorth);
   const maxNw=playerOwnership.length?(playerOwnership[0].netWorth||1):1;
@@ -886,8 +923,6 @@ function bankHTML(){
       <div class="ct">👥 Player Ownership</div>
       <div style="background:var(--s1);border-radius:var(--rs);overflow:hidden;border:1px solid var(--bd)">
       ${playerOwnership.map((t,i)=>{
-        const cashPct=Math.round((t.balance/Math.max(totalEconomy,1))*100);
-        const propPct=Math.round((t.propVal/Math.max(totalEconomy,1))*100);
         const nwPct=Math.round((t.netWorth/maxNw)*100);
         return`<div class="ownership-row">
           <div style="width:9px;height:9px;border-radius:50%;background:${t.color};flex-shrink:0"></div>
@@ -1037,7 +1072,7 @@ function modalHTML(){
     </div>`).join('')}
   </div></div>`;}
 
-  // ADD TEAM (normal FAB — FIX #1: now deducts from bank)
+  // ADD TEAM
   if(m.type==='addTeam'||m.type==='editTeam'){
     const t=m.team||{name:'',balance:state.board.startMoney,color:COLORS[state.teams.length%COLORS.length]};
     const isEdit=m.type==='editTeam';
@@ -1061,7 +1096,7 @@ function modalHTML(){
 
   // ADD / EDIT PROPERTY
   if(m.type==='addProp'||m.type==='editProp'){
-    const p=m.prop||{name:'',price:200,rent:20,group:'',colorIdx:0};
+    const p=m.prop||{name:'',price:200,rent:20,group:'',colorIdx:0,housePrice:0,rent1:0,rent2:0,rent3:0,houses:0};
     const groups=[...new Set(state.properties.map(x=>x.group).filter(Boolean))];
     return`<div class="moverlay" onclick="closeBg(event)"><div class="modal">
     <span class="mhandle"></span><button class="mclose" onclick="closeModal()">✕</button>
@@ -1069,12 +1104,13 @@ function modalHTML(){
     <div class="fr"><label>Name</label><input type="text" id="p-name" value="${esc(p.name)}" placeholder="e.g. Marina Beach" autofocus></div>
     <div class="f2">
       <div class="fr"><label>Price (₹)</label><input type="number" id="p-price" value="${p.price}" min="0"></div>
-      <div class="fr"><label>Rent (₹)</label><input type="number" id="p-rent" value="${p.rent}" min="0"></div>
+      <div class="fr"><label>Base Rent (₹)</label><input type="number" id="p-rent" value="${p.rent}" min="0"></div>
     </div>
     <div class="fr"><label>Rent Type</label>
       <select id="p-renttype" onchange="
         var v=this.value;
         document.getElementById('p-rent-wrap').style.display=v==='fixed'?'':'none';
+        document.getElementById('p-houses-wrap').style.display=v==='fixed'?'':'none';
         document.getElementById('p-mult-wrap').style.display=v==='dice'?'':'none';
       ">
         <option value="fixed" ${(p.rentType||'fixed')==='fixed'?'selected':''}>Fixed Rent (₹)</option>
@@ -1087,7 +1123,16 @@ function modalHTML(){
     <div id="p-mult-wrap" style="${p.rentType==='dice'?'':'display:none'}">
       <div class="fr"><label>Dice Multiplier (e.g. 4 = 4× dice roll)</label><input type="number" id="p-multiplier" value="${p.diceMultiplier||4}" min="1" max="20"></div>
     </div>
-    <div class="fr"><label>Group / Area</label>
+    <div id="p-houses-wrap" style="${(p.rentType||'fixed')==='fixed'?'':'display:none'}">
+      <div style="font-size:11px;color:var(--tx3);margin-bottom:6px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px">🏠 House Pricing (Optional)</div>
+      <div class="f2" style="border:1px solid var(--bd);border-radius:var(--rs);padding:10px;background:var(--s2)">
+        <div class="fr"><label>Cost to Build 1 🏠</label><input type="number" id="p-hprice" value="${p.housePrice||0}" min="0"></div>
+        <div class="fr"><label>Rent with 1 🏠</label><input type="number" id="p-rent1" value="${p.rent1||0}" min="0"></div>
+        <div class="fr"><label>Rent with 2 🏠</label><input type="number" id="p-rent2" value="${p.rent2||0}" min="0"></div>
+        <div class="fr"><label>Rent with 3 🏠</label><input type="number" id="p-rent3" value="${p.rent3||0}" min="0"></div>
+      </div>
+    </div>
+    <div class="fr" style="margin-top:13px"><label>Group / Area</label>
       <input type="text" id="p-group" value="${esc(p.group||'')}" placeholder="e.g. Marina" list="gl">
       <datalist id="gl">${groups.map(g=>`<option value="${esc(g)}">`).join('')}</datalist>
     </div>
@@ -1141,11 +1186,13 @@ function modalHTML(){
     <div style="max-height:260px;overflow-y:auto">
     ${active.map(p=>{const owner=state.teams.find(t=>t.id===p.ownedBy);
       const isDice=p.rentType==='dice';
+      const rentAmt=getActiveRent(p);
+      const houseStr=p.houses ? ' ' + '🏠'.repeat(p.houses) : '';
       return`<div class="prow" style="margin-bottom:6px">
         <div class="pleft">
           <div class="cbar" style="background:${COLORS[p.colorIdx??0]};height:${isDice?40:28}px"></div>
           <div>
-            <div class="pname">${esc(p.name)}</div>
+            <div class="pname">${esc(p.name)}${houseStr}</div>
             <div class="pmeta">Owner: <span style="color:${owner?.color}">${esc(owner?.name)}</span>${isDice?` · <span style="color:var(--am)">🎲 ×${p.diceMultiplier||4}</span>`:''}</div>
             ${isDice?`<div style="display:flex;align-items:center;gap:5px;margin-top:5px">
               <input type="number" id="dice-${p.id}" placeholder="Dice roll" min="2" max="12" style="width:80px;padding:5px 7px;font-size:12px" oninput="document.getElementById('dicerent-${p.id}').textContent='₹'+((parseInt(this.value)||0)*(${p.diceMultiplier||4}))">
@@ -1153,7 +1200,7 @@ function modalHTML(){
             </div>`:''}
           </div>
         </div>
-        <button class="btn sm blu" onclick="${isDice?`payRentDice('${payer.id}','${p.id}')`:` payRent('${payer.id}','${p.id}')`}">${isDice?'🎲 Pay':'₹'+num(p.rent)}</button>
+        <button class="btn sm blu" onclick="${isDice?`payRentDice('${payer.id}','${p.id}')`:` payRent('${payer.id}','${p.id}')`}">${isDice?'🎲 Pay':'₹'+num(rentAmt)}</button>
       </div>`;}).join('')}
     </div>`:`<div style="color:var(--tx3);font-size:13px;padding:12px 0 8px">No rentable properties owned by others.</div>`}
     ${suspended.length?`<div style="font-size:10px;color:var(--am);font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin-top:10px;margin-bottom:6px">🔒 Mortgaged — no rent</div>
@@ -1180,13 +1227,16 @@ function modalHTML(){
       <div style="font-weight:700;color:${team.color};font-size:15px">${esc(team.name)}</div>
       <div style="font-family:var(--ffd);font-size:20px;font-weight:900;margin-top:1px">₹${num(team.balance)}</div>
     </div>
-    <div class="info amb" style="font-size:11px">🏦 Mortgage = <strong>50% of price</strong> from bank. Rent suspended until unmortgaged.</div>
+    <div class="info amb" style="font-size:11px">🏦 Mortgage = <strong>50% of base price</strong> from bank. Rent suspended. Properties with houses cannot be mortgaged.</div>
     ${canMort.length?`<div class="ct" style="margin-top:12px">Available to Mortgage</div>
     <div style="max-height:200px;overflow-y:auto;margin-bottom:10px">
-    ${canMort.map(p=>{const mv=Math.floor((p.price||0)/2);const ok=state.board.bankBalance>=mv;
+    ${canMort.map(p=>{
+      const mv=Math.floor((p.price||0)/2);
+      const hasHouses=(p.houses||0)>0;
+      const ok=state.board.bankBalance>=mv && !hasHouses;
       return`<div class="prow" style="cursor:${ok?'pointer':'default'};margin-bottom:6px" ${ok?`onclick="mortgageProp('${p.id}')"`:''}}>
         <div class="pleft"><div class="cbar" style="background:${COLORS[p.colorIdx??0]};height:28px"></div>
-        <div><div class="pname">${esc(p.name)}</div><div class="pmeta">Get <strong style="color:var(--am)">₹${num(mv)}</strong>${!ok?' <span style="color:var(--r)">(Bank broke)</span>':''}</div></div></div>
+        <div><div class="pname">${esc(p.name)}</div><div class="pmeta">Get <strong style="color:var(--am)">₹${num(mv)}</strong>${hasHouses?' <span style="color:var(--r)">(Has houses)</span>':(!ok?' <span style="color:var(--r)">(Bank broke)</span>':'')}</div></div></div>
         <button class="btn sm amb" ${!ok?'disabled':''} onclick="event.stopPropagation();mortgageProp('${p.id}')">Mortgage</button>
       </div>`;}).join('')}
     </div>`:`<div style="color:var(--tx3);font-size:12px;padding:10px 0">No properties to mortgage.</div>`}
@@ -1213,7 +1263,7 @@ function modalHTML(){
     <div class="mtitle">🔨 Auction</div>
     <div style="display:flex;align-items:center;gap:11px;padding:11px;background:var(--s2);border-radius:var(--rs);border:1px solid var(--bd);margin-bottom:12px">
       <div style="width:12px;height:40px;border-radius:3px;flex-shrink:0;background:${COLORS[prop.colorIdx??0]}"></div>
-      <div style="flex:1"><div style="font-size:15px;font-weight:700">${esc(prop.name)}</div><div style="font-size:11px;color:var(--tx3);margin-top:2px">₹${num(prop.price)} · Rent ₹${num(prop.rent)}</div></div>
+      <div style="flex:1"><div style="font-size:15px;font-weight:700">${esc(prop.name)}</div><div style="font-size:11px;color:var(--tx3);margin-top:2px">₹${num(prop.price)} · Base Rent ₹${num(prop.rent)}</div></div>
       <span class="badge auct">🔨 Auction</span>
     </div>
     ${curBid>0?`<div style="background:var(--am-bg);border:1px solid var(--am-bd);border-radius:var(--rxs);padding:11px 13px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center">
@@ -1247,7 +1297,7 @@ function modalHTML(){
       <div style="font-weight:800;color:${team.color};font-size:15px">${esc(team.name)}</div>
       <div style="font-size:12px;color:var(--tx3);margin-top:3px">Cash: ₹${num(team.balance)} · ${tp.length} properties</div>
     </div>
-    <div class="info red" style="font-size:12px;margin-bottom:12px">All cash and properties return to bank. Player is removed.</div>
+    <div class="info red" style="font-size:12px;margin-bottom:12px">All cash and properties return to bank. Houses are lost. Player is removed.</div>
     ${tp.length?`<div style="margin-bottom:12px">
       <div style="font-size:10px;color:var(--tx3);margin-bottom:7px;font-weight:700;text-transform:uppercase;letter-spacing:.4px">Returning (${tp.length})</div>
       <div style="display:flex;flex-wrap:wrap;gap:4px">${tp.map(p=>`<span class="pchip"><span class="cdot" style="background:${COLORS[p.colorIdx??0]}"></span>${esc(p.name)}</span>`).join('')}</div>
@@ -1320,6 +1370,16 @@ function modalHTML(){
 // ══════════════════════════════════════════════════════════
 // ACTIONS — helpers
 // ══════════════════════════════════════════════════════════
+function getPropValue(p){
+  return (p.mortgaged ? Math.floor((p.price||0)/2) : (p.price||0)) + ((p.houses||0) * (p.housePrice||0));
+}
+function getActiveRent(p){
+  if(p.rentType==='dice') return 0;
+  if(p.houses===3) return p.rent3 || p.rent*4;
+  if(p.houses===2) return p.rent2 || p.rent*3;
+  if(p.houses===1) return p.rent1 || p.rent*2;
+  return p.rent || 0;
+}
 function uid(){return Math.random().toString(36).slice(2,9);}
 function stateChanged(){render();schedSave();}
 function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
@@ -1358,7 +1418,6 @@ function onFab(){
 // ══════════════════════════════════════════════════════════
 // TEAMS
 // ══════════════════════════════════════════════════════════
-// FIX #1 & #5: saveAddTeam now deducts from bank + validates bank balance
 window.saveAddTeam=()=>{
   const name=document.getElementById('m-name')?.value?.trim();
   const balance=parseInt(document.getElementById('m-balance')?.value)||0;
@@ -1380,7 +1439,6 @@ window.saveAddTeam=()=>{
 
 window.editTeam=id=>{const t=state.teams.find(x=>x.id===id);state.modal={type:'editTeam',teamId:id,team:{...t}};render();};
 
-// FIX #2: saveEditTeam now reconciles with bank
 window.saveEditTeam=id=>{
   const t=state.teams.find(x=>x.id===id);if(!t)return;
   const name=document.getElementById('m-name')?.value?.trim()||t.name;
@@ -1408,14 +1466,13 @@ window.deleteTeam=id=>{
     state.board.bankBalance+=team.balance;
     state.transactions.push({id:uid(),teamId:'bank',amount:team.balance,note:`${team.name} removed — cash returned to bank`,type:'admin',time:Date.now()});
   }
-  // Return mortgaged property value to bank
   state.properties.forEach(p=>{
     if(p.ownedBy===id){
       if(p.mortgaged){
         const mv=Math.floor((p.price||0)/2);
-        state.board.bankBalance-=mv; // bank already paid this out, no reclaim needed
+        state.board.bankBalance-=mv; 
       }
-      p.ownedBy=null;p.mortgaged=false;
+      p.ownedBy=null;p.mortgaged=false;p.houses=0;
     }
   });
   state.teams=state.teams.filter(t=>t.id!==id);
@@ -1434,6 +1491,11 @@ window.saveAddProp=()=>{
   state.properties.push({id:uid(),name,
     price:parseInt(document.getElementById('p-price')?.value)||0,
     rent,rentType,diceMultiplier,
+    housePrice:parseInt(document.getElementById('p-hprice')?.value)||0,
+    rent1:parseInt(document.getElementById('p-rent1')?.value)||0,
+    rent2:parseInt(document.getElementById('p-rent2')?.value)||0,
+    rent3:parseInt(document.getElementById('p-rent3')?.value)||0,
+    houses:0,
     group:document.getElementById('p-group')?.value?.trim()||'',
     colorIdx:parseInt(document.getElementById('p-color')?.value)||0,
     mortgaged:false,ownedBy:null
@@ -1448,6 +1510,10 @@ window.saveEditProp=id=>{
   p.rentType=document.getElementById('p-renttype')?.value||'fixed';
   p.rent=parseInt(document.getElementById('p-rent2')?.value)||p.rent;
   p.diceMultiplier=parseInt(document.getElementById('p-multiplier')?.value)||p.diceMultiplier||4;
+  p.housePrice=parseInt(document.getElementById('p-hprice')?.value)||0;
+  p.rent1=parseInt(document.getElementById('p-rent1')?.value)||0;
+  p.rent2=parseInt(document.getElementById('p-rent2')?.value)||0;
+  p.rent3=parseInt(document.getElementById('p-rent3')?.value)||0;
   p.group=document.getElementById('p-group')?.value?.trim()||'';
   p.colorIdx=parseInt(document.getElementById('p-color')?.value)||0;
   state.modal=null;stateChanged();toast('Property updated','suc');
@@ -1455,16 +1521,38 @@ window.saveEditProp=id=>{
 window.deleteProp=id=>{
   if(!confirm('Remove this property?'))return;
   const p=state.properties.find(x=>x.id===id);if(!p)return;
-  // If owned, return cash equivalent to bank so economy stays balanced
   if(p.ownedBy){
     const owner=state.teams.find(t=>t.id===p.ownedBy);
-    const refund=p.mortgaged?Math.floor((p.price||0)/2):(p.price||0);
-    // deduct from owner, credit bank — net property removal is neutral
+    const refund=getPropValue(p);
     if(owner){owner.balance-=Math.min(refund,owner.balance);}
     state.board.bankBalance+=refund;
     state.transactions.push({id:uid(),teamId:'bank',amount:refund,note:`Property deleted: ${p.name} — value reconciled`,type:'admin',time:Date.now()});
   }
   state.properties=state.properties.filter(x=>x.id!==id);stateChanged();
+};
+
+window.buildHouse=propId=>{
+  const p=state.properties.find(x=>x.id===propId);
+  if(!p||!p.ownedBy||p.mortgaged||(p.houses||0)>=3||p.rentType==='dice')return;
+  const owner=state.teams.find(t=>t.id===p.ownedBy);if(!owner)return;
+  if(owner.balance<p.housePrice){toast(`Need ₹${num(p.housePrice)} to build a house`,'err');return;}
+  owner.balance-=p.housePrice;state.board.bankBalance+=p.housePrice;
+  p.houses=(p.houses||0)+1;
+  state.transactions.push({id:uid(),teamId:owner.id,amount:-p.housePrice,note:`Built house ${p.houses}/3 on ${p.name}`,type:'debit',time:Date.now()});
+  toast(`🏠 House built on ${p.name}!`,'suc');
+  stateChanged();
+};
+
+window.sellHouse=propId=>{
+  const p=state.properties.find(x=>x.id===propId);
+  if(!p||!p.ownedBy||!p.houses)return;
+  const owner=state.teams.find(t=>t.id===p.ownedBy);if(!owner)return;
+  const refund=Math.floor((p.housePrice||0)/2);
+  owner.balance+=refund;state.board.bankBalance-=refund;
+  p.houses-=1;
+  state.transactions.push({id:uid(),teamId:owner.id,amount:refund,note:`Sold house on ${p.name}`,type:'credit',time:Date.now()});
+  toast(`🏠 House sold on ${p.name} (+₹${num(refund)})`,'amb');
+  stateChanged();
 };
 
 // ══════════════════════════════════════════════════════════
@@ -1480,7 +1568,6 @@ window.adjustBank=isAdding=>{
   state.modal=null;stateChanged();toast('Bank updated','suc');
 };
 
-// FIX #6: passGo uses configurable goSalary
 window.passGo=teamId=>{
   const salary=state.board.goSalary||200;
   if(state.board.bankBalance<salary){toast(`Bank needs ₹${num(salary)} for GO`,'err');return;}
@@ -1517,7 +1604,7 @@ window.confirmBuyProp=(propId,teamId)=>{
   if(!prop||!team)return;
   if(team.balance<prop.price){toast(`${team.name} has insufficient funds!`,'err');return;}
   team.balance-=prop.price;state.board.bankBalance+=prop.price;
-  prop.ownedBy=team.id;prop.mortgaged=false;
+  prop.ownedBy=team.id;prop.mortgaged=false;prop.houses=0;
   state.transactions.push({id:uid(),teamId,amount:-prop.price,note:`Bought ${prop.name} from Bank`,type:'debit',time:Date.now()});
   toast(`🏠 ${team.name} bought ${prop.name}!`,'suc');
   state.modal=null;stateChanged();
@@ -1531,13 +1618,14 @@ window.payRent=(fromId,propId)=>{
   const prop=state.properties.find(p=>p.id===propId);
   if(!prop||!prop.ownedBy)return;
   if(prop.mortgaged){toast('🔒 Property mortgaged — no rent!','amb');return;}
+  const rentAmt=getActiveRent(prop);
   const payer=state.teams.find(t=>t.id===fromId);
   const owner=state.teams.find(t=>t.id===prop.ownedBy);
   if(!payer||!owner)return;
-  payer.balance-=prop.rent;owner.balance+=prop.rent;
-  state.transactions.push({id:uid(),teamId:fromId,amount:-prop.rent,note:`Rent: ${prop.name}`,type:'rent',time:Date.now()});
-  state.transactions.push({id:uid(),teamId:prop.ownedBy,amount:prop.rent,note:`Rent from ${payer.name}: ${prop.name}`,type:'rent',time:Date.now()});
-  toast(`₹${num(prop.rent)} paid to ${owner.name}!`,'suc');
+  payer.balance-=rentAmt;owner.balance+=rentAmt;
+  state.transactions.push({id:uid(),teamId:fromId,amount:-rentAmt,note:`Rent: ${prop.name}`,type:'rent',time:Date.now()});
+  state.transactions.push({id:uid(),teamId:prop.ownedBy,amount:rentAmt,note:`Rent from ${payer.name}: ${prop.name}`,type:'rent',time:Date.now()});
+  toast(`₹${num(rentAmt)} paid to ${owner.name}!`,'suc');
   state.modal={type:'rent',teamId:fromId};stateChanged();
 };
 window.payRentDice=(fromId,propId)=>{
@@ -1565,6 +1653,7 @@ window.openMortgage=teamId=>{state.modal={type:'mortgage',teamId};render();};
 window.mortgageProp=propId=>{
   const prop=state.properties.find(p=>p.id===propId);
   if(!prop||!prop.ownedBy||prop.mortgaged)return;
+  if((prop.houses||0)>0){toast('Must sell houses before mortgaging','err');return;}
   const owner=state.teams.find(t=>t.id===prop.ownedBy);if(!owner)return;
   const mv=Math.floor((prop.price||0)/2);
   if(state.board.bankBalance<mv){toast('Bank insufficient funds for mortgage!','err');return;}
@@ -1605,7 +1694,6 @@ window.placeBid=(propId,teamId)=>{
   state.modal={...m,currentBid:bidAmt,currentBidderId:teamId};
   toast(`🔨 ${team.name} bids ₹${num(bidAmt)}!`,'');render();
 };
-// FIX #7: finalizeAuction re-validates winner balance
 window.finalizeAuction=propId=>{
   const m=state.modal;
   if(!m||m.type!=='auction'||!m.currentBidderId||!m.currentBid)return;
@@ -1629,7 +1717,7 @@ window.confirmBankruptcy=teamId=>{
   const tp=state.properties.filter(p=>p.ownedBy===teamId);
   const cashLost=team.balance;
   if(cashLost>0)state.board.bankBalance+=cashLost;
-  tp.forEach(p=>{p.ownedBy=null;p.mortgaged=false;});
+  tp.forEach(p=>{p.ownedBy=null;p.mortgaged=false;p.houses=0;});
   state.transactions.push({id:uid(),teamId,amount:-cashLost,note:`💀 Bankruptcy — ₹${num(cashLost)} cash + ${tp.length} props returned`,type:'bankruptcy',time:Date.now()});
   state.teams=state.teams.filter(t=>t.id!==teamId);
   toast(`💀 ${team.name} bankrupt`,'err');
@@ -1639,18 +1727,15 @@ window.confirmBankruptcy=teamId=>{
 // ══════════════════════════════════════════════════════════
 // SETTINGS
 // ══════════════════════════════════════════════════════════
-// FIX #3: saveBoardSettings does NOT overwrite live bankBalance
 window.saveBoardSettings=()=>{
   state.board.name=document.getElementById('s-name')?.value?.trim()||state.board.name;
   state.board.startMoney=parseInt(document.getElementById('s-start')?.value)||1500;
   state.board.goSalary=parseInt(document.getElementById('s-go')?.value)||200;
   state.board.bankInitial=parseInt(document.getElementById('s-bank-init')?.value)||2000;
-  // bankBalance is NOT modified here
   document.getElementById('hdr-board').textContent=state.board.name;
   stateChanged();toast('Settings saved','suc');
 };
 
-// FIX #10: resetAll also resets bank balance and board name to defaults
 window.resetAll=()=>{
   if(!confirm('Reset ALL game data including properties? This cannot be undone!'))return;
   state.teams=[];state.properties=[];state.transactions=[];
@@ -1684,8 +1769,7 @@ window.handleImport=e=>{
 window.resetKeepProps=()=>{
   if(!confirm('Reset players and transactions but KEEP all properties? This cannot be undone!'))return;
   state.teams=[];state.transactions=[];
-  // Reset each property to unowned
-  state.properties.forEach(p=>{p.ownedBy=null;p.mortgaged=false;});
+  state.properties.forEach(p=>{p.ownedBy=null;p.mortgaged=false;p.houses=0;});
   state.board.bankBalance=state.board.bankInitial||2000;
   stateChanged();toast('Game reset — properties kept','suc');
 };
