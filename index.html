@@ -539,6 +539,8 @@ select option{background:var(--s2)}
     </div>
     <div class="hdr-right">
       <div class="sync-chip"><div class="sdot" id="sdot"></div><span id="sync-lbl">Live</span></div>
+      <button class="hbtn" style="padding:7px 10px; font-size:14px;" onclick="doUndo()" title="Undo">↩️</button>
+      <button class="hbtn" style="padding:7px 10px; font-size:14px;" onclick="doRedo()" title="Redo">↪️</button>
       <button class="hbtn" onclick="doLogout()">Sign out</button>
     </div>
   </div>
@@ -605,6 +607,8 @@ let state={
 };
 let saveTimer=null;
 let es=null;
+let historyStack = [];
+let historyIndex = -1;
 
 // ══════════════════════════════════════════════════════════
 // AUTH
@@ -653,7 +657,9 @@ async function loadState(){
     const r=await fetch(`${API}/api/state`,{headers:{Authorization:'Bearer '+token}});
     if(r.status===401){doLogout();return;}
     const d=await r.json();
-    mergeServerState(d);render();
+    mergeServerState(d);
+    pushHistory(); // Capture initial state
+    render();
   }catch(e){setSyncStatus('off');}
 }
 function mergeServerState(d){
@@ -683,6 +689,7 @@ function connectSSE(){
     const d=JSON.parse(e.data);
     const wasModal=state.modal;
     mergeServerState(d);
+    pushHistory(); // Add remote updates to history
     if(wasModal)state.modal=wasModal;
     render();
   });
@@ -1089,10 +1096,10 @@ function settingsHTML(){
           <span class="adm-lbl">Adjust Bank</span>
           <span class="adm-sub">Add or remove bank funds</span>
         </button>
-        <button class="adm-btn" onclick="checkBankruptcyLogs()">
-          <span class="adm-icon">💀</span>
-          <span class="adm-lbl">Check Logs</span>
-          <span class="adm-sub">Verify bankruptcy transactions</span>
+        <button class="adm-btn" onclick="clearLogs()">
+          <span class="adm-icon">🗑️</span>
+          <span class="adm-lbl">Clear Logs</span>
+          <span class="adm-sub">Delete all transaction history</span>
         </button>
       </div>
     </div>
@@ -1457,7 +1464,43 @@ function getActiveRent(p){
   return p.rent || 0;
 }
 function uid(){return Math.random().toString(36).slice(2,9);}
-function stateChanged(){render();schedSave();}
+function pushHistory() {
+  const snap = JSON.stringify({ board: state.board, teams: state.teams, properties: state.properties, transactions: state.transactions });
+  if (historyIndex >= 0 && historyStack[historyIndex] === snap) return; // Prevent duplicate states
+  historyStack = historyStack.slice(0, historyIndex + 1);
+  historyStack.push(snap);
+  if (historyStack.length > 50) historyStack.shift(); // Keep last 50 actions
+  historyIndex = historyStack.length - 1;
+}
+
+function stateChanged() {
+  pushHistory();
+  render();
+  schedSave();
+}
+
+window.doUndo = () => {
+  if (historyIndex <= 0) { toast('Nothing to undo', 'amb'); return; }
+  historyIndex--;
+  const snap = JSON.parse(historyStack[historyIndex]);
+  state.board = snap.board; state.teams = snap.teams; state.properties = snap.properties; state.transactions = snap.transactions;
+  render(); schedSave(); toast('Undo successful', 'suc');
+};
+
+window.doRedo = () => {
+  if (historyIndex >= historyStack.length - 1) { toast('Nothing to redo', 'amb'); return; }
+  historyIndex++;
+  const snap = JSON.parse(historyStack[historyIndex]);
+  state.board = snap.board; state.teams = snap.teams; state.properties = snap.properties; state.transactions = snap.transactions;
+  render(); schedSave(); toast('Redo successful', 'suc');
+};
+
+window.clearLogs = () => {
+  if(!confirm('Are you sure you want to clear all transaction logs?')) return;
+  state.transactions = [];
+  stateChanged();
+  toast('Transaction logs cleared', 'suc');
+};
 function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 function num(n){return(n||0).toLocaleString('en-IN');}
 function formatTime(ts){
