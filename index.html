@@ -628,7 +628,7 @@ function render(){
 // ══════════════════════════════════════════════════════════
 function homeHTML(){
   const totalCash=state.teams.reduce((s,t)=>s+t.balance,0);
-  const totalPropVal=state.properties.reduce((s,p)=>s+(p.ownedBy?p.price:0),0);
+  const totalPropVal=state.properties.reduce((s,p)=>s+(p.price||0),0);
   const bankProps=state.properties.filter(p=>!p.ownedBy&&!p.mortgaged);
   const totalMoney=totalCash+state.board.bankBalance+totalPropVal;
   return`<div>
@@ -636,7 +636,7 @@ function homeHTML(){
     <div class="economy-card">
       <div class="eco-title">Total Economy</div>
       <div class="eco-val">₹${num(totalMoney)}</div>
-      <div class="eco-sub">Cash in circulation + Bank + Property value</div>
+      <div class="eco-sub">Cash in circulation + Bank + All property values</div>
     </div>
     <div class="sgrid">
       <div class="sbox">
@@ -661,7 +661,7 @@ function homeHTML(){
       ${bankProps.slice(0,5).map(p=>`<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--bd)">
         <div style="display:flex;align-items:center;gap:8px">
           <div style="width:8px;height:22px;border-radius:2px;background:${COLORS[p.colorIdx??0]}"></div>
-          <div><div style="font-size:13px;font-weight:600">${esc(p.name)}</div><div style="font-size:11px;color:var(--tx3)">₹${num(p.price)} · Rent ₹${num(p.rent)}</div></div>
+          <div><div style="font-size:13px;font-weight:600">${esc(p.name)}</div><div style="font-size:11px;color:var(--tx3)">₹${num(p.price)} · ${p.rentType==='dice'?`🎲 ×${p.diceMultiplier||4} dice`:`Rent ₹${num(p.rent)}`}</div></div>
         </div>
         <div style="display:flex;gap:5px">
           <button class="btn sm suc" onclick="setTab('properties');setTimeout(()=>openBuyProp('${p.id}'),50)">Buy</button>
@@ -749,7 +749,7 @@ function propsHTML(){
             <div class="cbar" style="background:${COLORS[p.colorIdx??0]};height:34px"></div>
             <div>
               <div class="pname">${esc(p.name)}${p.mortgaged?' 🔒':''}</div>
-              <div class="pmeta">₹${num(p.price)} · Rent ₹${num(p.rent)}${owner?` · <span style="color:${owner.color}">${esc(owner.name)}</span>`:''}</div>
+              <div class="pmeta">₹${num(p.price)} · ${p.rentType==='dice'?`🎲 ×${p.diceMultiplier||4} dice`:`Rent ₹${num(p.rent)}`}${owner?` · <span style="color:${owner.color}">${esc(owner.name)}</span>`:''}</div>
             </div>
           </div>
           <div style="display:flex;flex-direction:column;align-items:flex-end;gap:5px">
@@ -805,7 +805,7 @@ function leaderboardHTML(){
 // ══════════════════════════════════════════════════════════
 function bankHTML(){
   const totalCash=state.teams.reduce((s,t)=>s+t.balance,0);
-  const totalPropVal=state.properties.reduce((s,p)=>s+(p.ownedBy?p.price:0),0);
+  const totalPropVal=state.properties.reduce((s,p)=>s+(p.price||0),0);
   const totalEconomy=totalCash+state.board.bankBalance+totalPropVal;
   const totalOwned=state.properties.filter(p=>p.ownedBy).length;
   const totalMortgaged=state.properties.filter(p=>p.mortgaged).length;
@@ -977,9 +977,12 @@ function settingsHTML(){
       <div class="ct">Data</div>
       <div style="display:flex;gap:7px;flex-wrap:wrap">
         <button class="btn" onclick="exportData()">📥 Export JSON</button>
-        <button class="btn dan" onclick="resetAll()">⚠️ Reset Game</button>
+        <button class="btn blu" onclick="importData()">📤 Import JSON</button>
+        <button class="btn amb" onclick="resetKeepProps()">🔄 Reset — Keep Properties</button>
+        <button class="btn dan" onclick="resetAll()">⚠️ Reset Everything</button>
       </div>
-      <div style="font-size:11px;color:var(--tx3);margin-top:9px">Export creates a backup. Reset wipes all players, properties, and transactions — board settings kept.</div>
+      <input type="file" id="import-file" accept=".json" style="display:none" onchange="handleImport(event)">
+      <div style="font-size:11px;color:var(--tx3);margin-top:9px">Export creates a backup. <strong style="color:var(--am)">Reset — Keep Properties</strong> wipes players & transactions but keeps all properties and board settings. <strong style="color:var(--r)">Reset Everything</strong> wipes all data.</div>
     </div>
   </div>`;
 }
@@ -1054,6 +1057,22 @@ function modalHTML(){
       <div class="fr"><label>Price (₹)</label><input type="number" id="p-price" value="${p.price}" min="0"></div>
       <div class="fr"><label>Rent (₹)</label><input type="number" id="p-rent" value="${p.rent}" min="0"></div>
     </div>
+    <div class="fr"><label>Rent Type</label>
+      <select id="p-renttype" onchange="
+        var v=this.value;
+        document.getElementById('p-rent-wrap').style.display=v==='fixed'?'':'none';
+        document.getElementById('p-mult-wrap').style.display=v==='dice'?'':'none';
+      ">
+        <option value="fixed" ${(p.rentType||'fixed')==='fixed'?'selected':''}>Fixed Rent (₹)</option>
+        <option value="dice" ${p.rentType==='dice'?'selected':''}>Dice Roll × Multiplier</option>
+      </select>
+    </div>
+    <div id="p-rent-wrap" style="${(p.rentType||'fixed')==='fixed'?'':'display:none'}">
+      <div class="fr"><label>Fixed Rent Amount (₹)</label><input type="number" id="p-rent2" value="${p.rent}" min="0"></div>
+    </div>
+    <div id="p-mult-wrap" style="${p.rentType==='dice'?'':'display:none'}">
+      <div class="fr"><label>Dice Multiplier (e.g. 4 = 4× dice roll)</label><input type="number" id="p-multiplier" value="${p.diceMultiplier||4}" min="1" max="20"></div>
+    </div>
     <div class="fr"><label>Group / Area</label>
       <input type="text" id="p-group" value="${esc(p.group||'')}" placeholder="e.g. Marina" list="gl">
       <datalist id="gl">${groups.map(g=>`<option value="${esc(g)}">`).join('')}</datalist>
@@ -1107,12 +1126,20 @@ function modalHTML(){
     ${active.length?`<div class="ct">Tap to pay rent</div>
     <div style="max-height:260px;overflow-y:auto">
     ${active.map(p=>{const owner=state.teams.find(t=>t.id===p.ownedBy);
-      return`<div class="prow" style="cursor:pointer;margin-bottom:6px" onclick="payRent('${payer.id}','${p.id}')">
+      const isDice=p.rentType==='dice';
+      return`<div class="prow" style="margin-bottom:6px">
         <div class="pleft">
-          <div class="cbar" style="background:${COLORS[p.colorIdx??0]};height:28px"></div>
-          <div><div class="pname">${esc(p.name)}</div><div class="pmeta">Owner: <span style="color:${owner?.color}">${esc(owner?.name)}</span></div></div>
+          <div class="cbar" style="background:${COLORS[p.colorIdx??0]};height:${isDice?40:28}px"></div>
+          <div>
+            <div class="pname">${esc(p.name)}</div>
+            <div class="pmeta">Owner: <span style="color:${owner?.color}">${esc(owner?.name)}</span>${isDice?` · <span style="color:var(--am)">🎲 ×${p.diceMultiplier||4}</span>`:''}</div>
+            ${isDice?`<div style="display:flex;align-items:center;gap:5px;margin-top:5px">
+              <input type="number" id="dice-${p.id}" placeholder="Dice roll" min="2" max="12" style="width:80px;padding:5px 7px;font-size:12px" oninput="document.getElementById('dicerent-${p.id}').textContent='₹'+((parseInt(this.value)||0)*(${p.diceMultiplier||4}))">
+              <span style="font-size:11px;color:var(--am);font-weight:700" id="dicerent-${p.id}">₹0</span>
+            </div>`:''}
+          </div>
         </div>
-        <button class="btn sm blu" onclick="event.stopPropagation();payRent('${payer.id}','${p.id}')">₹${num(p.rent)}</button>
+        <button class="btn sm blu" onclick="${isDice?`payRentDice('${payer.id}','${p.id}')`:` payRent('${payer.id}','${p.id}')`}">${isDice?'🎲 Pay':'₹'+num(p.rent)}</button>
       </div>`;}).join('')}
     </div>`:`<div style="color:var(--tx3);font-size:13px;padding:12px 0 8px">No rentable properties owned by others.</div>`}
     ${suspended.length?`<div style="font-size:10px;color:var(--am);font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin-top:10px;margin-bottom:6px">🔒 Mortgaged — no rent</div>
@@ -1387,9 +1414,12 @@ window.deleteTeam=id=>{
 window.saveAddProp=()=>{
   const name=document.getElementById('p-name')?.value?.trim();
   if(!name){toast('Enter a property name','err');return;}
+  const rentType=document.getElementById('p-renttype')?.value||'fixed';
+  const rent=parseInt(document.getElementById('p-rent2')?.value)||0;
+  const diceMultiplier=parseInt(document.getElementById('p-multiplier')?.value)||4;
   state.properties.push({id:uid(),name,
     price:parseInt(document.getElementById('p-price')?.value)||0,
-    rent:parseInt(document.getElementById('p-rent')?.value)||0,
+    rent,rentType,diceMultiplier,
     group:document.getElementById('p-group')?.value?.trim()||'',
     colorIdx:parseInt(document.getElementById('p-color')?.value)||0,
     mortgaged:false,ownedBy:null
@@ -1401,14 +1431,26 @@ window.saveEditProp=id=>{
   const p=state.properties.find(x=>x.id===id);if(!p)return;
   p.name=document.getElementById('p-name')?.value?.trim()||p.name;
   p.price=parseInt(document.getElementById('p-price')?.value)||p.price;
-  p.rent=parseInt(document.getElementById('p-rent')?.value)||p.rent;
+  p.rentType=document.getElementById('p-renttype')?.value||'fixed';
+  p.rent=parseInt(document.getElementById('p-rent2')?.value)||p.rent;
+  p.diceMultiplier=parseInt(document.getElementById('p-multiplier')?.value)||p.diceMultiplier||4;
   p.group=document.getElementById('p-group')?.value?.trim()||'';
   p.colorIdx=parseInt(document.getElementById('p-color')?.value)||0;
   state.modal=null;stateChanged();toast('Property updated','suc');
 };
 window.deleteProp=id=>{
   if(!confirm('Remove this property?'))return;
-  state.properties=state.properties.filter(p=>p.id!==id);stateChanged();
+  const p=state.properties.find(x=>x.id===id);if(!p)return;
+  // If owned, return cash equivalent to bank so economy stays balanced
+  if(p.ownedBy){
+    const owner=state.teams.find(t=>t.id===p.ownedBy);
+    const refund=p.mortgaged?Math.floor((p.price||0)/2):(p.price||0);
+    // deduct from owner, credit bank — net property removal is neutral
+    if(owner){owner.balance-=Math.min(refund,owner.balance);}
+    state.board.bankBalance+=refund;
+    state.transactions.push({id:uid(),teamId:'bank',amount:refund,note:`Property deleted: ${p.name} — value reconciled`,type:'admin',time:Date.now()});
+  }
+  state.properties=state.properties.filter(x=>x.id!==id);stateChanged();
 };
 
 // ══════════════════════════════════════════════════════════
@@ -1482,6 +1524,23 @@ window.payRent=(fromId,propId)=>{
   state.transactions.push({id:uid(),teamId:fromId,amount:-prop.rent,note:`Rent: ${prop.name}`,type:'rent',time:Date.now()});
   state.transactions.push({id:uid(),teamId:prop.ownedBy,amount:prop.rent,note:`Rent from ${payer.name}: ${prop.name}`,type:'rent',time:Date.now()});
   toast(`₹${num(prop.rent)} paid to ${owner.name}!`,'suc');
+  state.modal={type:'rent',teamId:fromId};stateChanged();
+};
+window.payRentDice=(fromId,propId)=>{
+  const prop=state.properties.find(p=>p.id===propId);
+  if(!prop||!prop.ownedBy)return;
+  if(prop.mortgaged){toast('🔒 Property mortgaged — no rent!','amb');return;}
+  const diceVal=parseInt(document.getElementById(`dice-${propId}`)?.value)||0;
+  if(!diceVal||diceVal<2||diceVal>12){toast('Enter a valid dice roll (2–12)','err');return;}
+  const rentAmt=diceVal*(prop.diceMultiplier||4);
+  const payer=state.teams.find(t=>t.id===fromId);
+  const owner=state.teams.find(t=>t.id===prop.ownedBy);
+  if(!payer||!owner)return;
+  if(payer.balance<rentAmt){toast(`${payer.name} only has ₹${num(payer.balance)}, rent is ₹${num(rentAmt)}`,'err');return;}
+  payer.balance-=rentAmt;owner.balance+=rentAmt;
+  state.transactions.push({id:uid(),teamId:fromId,amount:-rentAmt,note:`Rent (🎲${diceVal}×${prop.diceMultiplier||4}): ${prop.name}`,type:'rent',time:Date.now()});
+  state.transactions.push({id:uid(),teamId:prop.ownedBy,amount:rentAmt,note:`Rent from ${payer.name} (🎲${diceVal}×${prop.diceMultiplier||4}): ${prop.name}`,type:'rent',time:Date.now()});
+  toast(`🎲 Dice ${diceVal} → ₹${num(rentAmt)} paid to ${owner.name}!`,'suc');
   state.modal={type:'rent',teamId:fromId};stateChanged();
 };
 
@@ -1579,7 +1638,7 @@ window.saveBoardSettings=()=>{
 
 // FIX #10: resetAll also resets bank balance and board name to defaults
 window.resetAll=()=>{
-  if(!confirm('Reset ALL game data? This cannot be undone!'))return;
+  if(!confirm('Reset ALL game data including properties? This cannot be undone!'))return;
   state.teams=[];state.properties=[];state.transactions=[];
   state.board.bankBalance=state.board.bankInitial||2000;
   stateChanged();toast('Game reset','suc');
@@ -1588,6 +1647,33 @@ window.resetAll=()=>{
 window.exportData=()=>{
   const d=JSON.stringify({board:state.board,teams:state.teams,properties:state.properties,transactions:state.transactions},null,2);
   const a=document.createElement('a');a.href='data:text/json;charset=utf-8,'+encodeURIComponent(d);a.download='monopoly-backup.json';a.click();
+};
+window.importData=()=>{document.getElementById('import-file').click();};
+window.handleImport=e=>{
+  const file=e.target.files[0];if(!file)return;
+  const reader=new FileReader();
+  reader.onload=ev=>{
+    try{
+      const d=JSON.parse(ev.target.result);
+      if(!d||typeof d!=='object'){toast('Invalid JSON file','err');return;}
+      if(!confirm('Import will overwrite current game data. Continue?'))return;
+      if(d.board)state.board={...state.board,...d.board};
+      if(Array.isArray(d.teams))state.teams=d.teams;
+      if(Array.isArray(d.properties))state.properties=d.properties;
+      if(Array.isArray(d.transactions))state.transactions=d.transactions;
+      stateChanged();toast('Game imported successfully','suc');
+    }catch(err){toast('Failed to parse JSON file','err');}
+  };
+  reader.readAsText(file);
+  e.target.value='';
+};
+window.resetKeepProps=()=>{
+  if(!confirm('Reset players and transactions but KEEP all properties? This cannot be undone!'))return;
+  state.teams=[];state.transactions=[];
+  // Reset each property to unowned
+  state.properties.forEach(p=>{p.ownedBy=null;p.mortgaged=false;});
+  state.board.bankBalance=state.board.bankInitial||2000;
+  stateChanged();toast('Game reset — properties kept','suc');
 };
 
 // ══════════════════════════════════════════════════════════
