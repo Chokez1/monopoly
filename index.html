@@ -1271,7 +1271,7 @@ function modalHTML(){
             <div class="pname">${esc(p.name)}${houseStr}</div>
             <div class="pmeta">Owner: <span style="color:${owner?.color}">${esc(owner?.name)}</span>${isDice?` · <span style="color:var(--am)">🎲 ×${p.diceMultiplier||4}</span>`:''}</div>
             ${isDice?`<div style="display:flex;align-items:center;gap:5px;margin-top:5px">
-              <input type="number" id="dice-${p.id}" placeholder="Dice roll" min="2" max="12" style="width:80px;padding:5px 8px;font-size:12px" oninput="document.getElementById('dicerent-${p.id}').textContent='₹'+((parseInt(this.value)||0)*(${p.diceMultiplier||4}))">
+              <input type="number" id="dice-${p.id}" placeholder="Dice roll" min="2" max="100" style="width:80px;padding:5px 8px;font-size:12px" oninput="document.getElementById('dicerent-${p.id}').textContent='₹'+((parseInt(this.value)||0)*(${p.diceMultiplier||4}))">
               <span style="font-size:12px;color:var(--am);font-weight:700;font-family:var(--ffm)" id="dicerent-${p.id}">₹0</span>
             </div>`:''}
           </div>
