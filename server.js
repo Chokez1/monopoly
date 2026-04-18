@@ -3,9 +3,7 @@
  * Run: node server.js
  * Requires: npm install express cors bcryptjs
  *
- * FIXES APPLIED:
- * - DEFAULT_STATE bankBalance changed from 20580 to 2000
- * - All other fixes are frontend-side (see index.html)
+ * UPDATE: Added per-user isolated game instances.
  */
 
 const express = require('express');
@@ -25,12 +23,15 @@ app.use(express.json());
 app.use(express.static(__dirname));
 
 // ─── SSE clients ───────────────────────────────────────────────────────────────
+// We now store the username along with the response object to isolate events
 const sseClients = new Set();
 
-function pushToAll(event, data) {
+function pushToUser(username, event, data) {
   const msg = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
-  sseClients.forEach(res => {
-    try { res.write(msg); } catch(e) { sseClients.delete(res); }
+  sseClients.forEach(client => {
+    if (client.username === username) {
+      try { client.res.write(msg); } catch(e) { sseClients.delete(client); }
+    }
   });
 }
 
@@ -45,7 +46,6 @@ function writeJSON(file, data) {
   fs.writeFileSync(file, JSON.stringify(data, null, 2), 'utf8');
 }
 
-// ─── FIX #4: Default bank balance changed from 20580 → 2000 ──────────────────
 const DEFAULT_STATE = {
   board: { name: 'My Monopoly Board', startMoney: 1500, bankBalance: 2000, goSalary: 200 },
   teams: [],
@@ -53,8 +53,24 @@ const DEFAULT_STATE = {
   transactions: []
 };
 
-let gameState = readJSON(DATA_FILE, DEFAULT_STATE);
+// We now store a map of game states keyed by username
+let allGameStates = readJSON(DATA_FILE, {});
 let users = readJSON(USERS_FILE, {});
+
+// Migration logic: If the data file has the old global format, clear it to prevent crashes
+if (allGameStates.board) {
+  allGameStates = {};
+  writeJSON(DATA_FILE, allGameStates);
+}
+
+// Helper to get or initialize a user's isolated state
+function getUserState(username) {
+  if (!allGameStates[username]) {
+    allGameStates[username] = JSON.parse(JSON.stringify(DEFAULT_STATE));
+    writeJSON(DATA_FILE, allGameStates);
+  }
+  return allGameStates[username];
+}
 
 // ─── Sessions ─────────────────────────────────────────────────────────────────
 const sessions = {};
@@ -70,7 +86,9 @@ function getSession(req) {
   return sessions[token] || null;
 }
 function requireAuth(req, res, next) {
-  if (!getSession(req)) return res.status(401).json({ error: 'Unauthorized' });
+  const session = getSession(req);
+  if (!session) return res.status(401).json({ error: 'Unauthorized' });
+  req.session = session; // Attach session so routes know WHO is calling
   next();
 }
 
@@ -82,6 +100,10 @@ app.post('/api/register', async (req, res) => {
   const hash = await bcrypt.hash(password, 10);
   users[username] = { hash, created: Date.now() };
   writeJSON(USERS_FILE, users);
+  
+  // Initialize their blank canvas game
+  getUserState(username); 
+
   const token = createSession(username);
   res.json({ token, username });
 });
@@ -106,24 +128,29 @@ app.post('/api/logout', requireAuth, (req, res) => {
 
 // ─── State routes ─────────────────────────────────────────────────────────────
 app.get('/api/state', requireAuth, (req, res) => {
-  res.json(gameState);
+  res.json(getUserState(req.session.username));
 });
 
 app.post('/api/state', requireAuth, (req, res) => {
+  const username = req.session.username;
   const newState = req.body;
   if (!newState || typeof newState !== 'object') return res.status(400).json({ error: 'Invalid state' });
-  gameState = { ...DEFAULT_STATE, ...newState };
-  writeJSON(DATA_FILE, gameState);
-  pushToAll('stateUpdate', gameState);
+  
+  // Update ONLY the calling user's state
+  allGameStates[username] = { ...DEFAULT_STATE, ...newState };
+  writeJSON(DATA_FILE, allGameStates);
+  pushToUser(username, 'stateUpdate', allGameStates[username]);
   res.json({ ok: true });
 });
 
 app.patch('/api/state', requireAuth, (req, res) => {
+  const username = req.session.username;
   const patch = req.body;
   if (!patch || typeof patch !== 'object') return res.status(400).json({ error: 'Invalid patch' });
-  gameState = deepMerge(gameState, patch);
-  writeJSON(DATA_FILE, gameState);
-  pushToAll('stateUpdate', gameState);
+  
+  allGameStates[username] = deepMerge(getUserState(username), patch);
+  writeJSON(DATA_FILE, allGameStates);
+  pushToUser(username, 'stateUpdate', allGameStates[username]);
   res.json({ ok: true });
 });
 
@@ -144,24 +171,39 @@ function deepMerge(target, source) {
 // ─── SSE endpoint ─────────────────────────────────────────────────────────────
 app.get('/api/events', (req, res) => {
   const queryToken = req.query.token;
-  if (queryToken && !sessions[queryToken]) return res.status(401).json({ error: 'Unauthorized' });
-  if (!queryToken) {
-    const session = getSession(req);
-    if (!session) return res.status(401).json({ error: 'Unauthorized' });
+  let session = null;
+  
+  if (queryToken && sessions[queryToken]) {
+    session = sessions[queryToken];
+  } else {
+    session = getSession(req);
   }
+
+  if (!session) return res.status(401).json({ error: 'Unauthorized' });
+
+  const username = session.username;
+
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection', 'keep-alive');
   res.setHeader('X-Accel-Buffering', 'no');
   res.flushHeaders();
-  res.write(`event: stateUpdate\ndata: ${JSON.stringify(gameState)}\n\n`);
+  
+  // Send initial data strictly for this user
+  res.write(`event: stateUpdate\ndata: ${JSON.stringify(getUserState(username))}\n\n`);
 
   const heartbeat = setInterval(() => {
     try { res.write(': ping\n\n'); } catch(e) {}
   }, 25000);
 
-  sseClients.add(res);
-  req.on('close', () => { sseClients.delete(res); clearInterval(heartbeat); });
+  // Store the client mapped to their username
+  const client = { res, username };
+  sseClients.add(client);
+  
+  req.on('close', () => { 
+    sseClients.delete(client); 
+    clearInterval(heartbeat); 
+  });
 });
 
 app.get('/api/health', (req, res) => res.json({ ok: true, clients: sseClients.size }));
